@@ -48,14 +48,46 @@ class Database(object):
                                     falsePositives=True, 
                                     matchSize=True):
         ""
-        df = pd.DataFrame( columns=["InteractionID", "ComplexName", "Entry1","Entry2","Class"])
+        if self._checkIfFilteredFileExists(dbID,filterDb):
 
-        filteredDB = self._filterDb(dbID,filterDb,complexIDsColumn,complexNameColumn,complexNameFilterString)
-        df = self._findPositiveInteractions(filteredDB,df,dbID,complexNameColumn)
-        print("{} interactions found using the given filter criteria.")
-        if falsePositives:
-            df = self._generateFalseInterctions(df,filteredDB, matchSize)
-        return df 
+            self.df = self._loadFile()
+            print("File was saved already and is loaded")
+            return self.df
+
+        else:
+
+            df = pd.DataFrame( columns=["InteractionID", "ComplexName", "Entry1","Entry2","Class"])
+            filteredDB = self._filterDb(dbID,filterDb,complexIDsColumn,complexNameColumn,complexNameFilterString)
+            self.df = self._findPositiveInteractions(filteredDB,df,dbID,complexNameColumn)
+            print("{} interactions found using the given filter criteria.".format(self.df.index.size))
+            if falsePositives:
+                self.df = self._generateFalseInterctions(self.df,filteredDB, matchSize)
+            self._saveFilteredDf(dbID)
+            return self.df 
+
+    def _loadFile(self):
+        ""
+        return pd.read_csv(self.pathToFile,sep="\t",index_col=False)
+
+    def _checkIfFilteredFileExists(self,dbID,filterDb):
+        ""
+        fileName = self._generateFileName(dbID,filterDb)
+        sourcePath = self._getPathToReferenceFiles()
+        self.pathToFile = os.path.join(sourcePath,fileName)
+        return os.path.exists(self.pathToFile)
+
+    def _generateFileName(self,dbName,filterDb):
+        ""
+        fileName = dbName.replace('.txt','')
+        for k,v in filterDb.items():
+            fileName = fileName + "_{}_".format(k) + '_'.join(v)
+        return fileName + '.txt'
+
+    def _saveFilteredDf(self,fileName):
+        ""
+        self.df.to_csv(self.pathToFile,
+                        sep="\t",
+                        index=False)
 
     def _generateFalseInterctions(self,df,filteredDB,matchSize):
 
@@ -67,25 +99,21 @@ class Database(object):
         else:
             raise ValueError("matchSize must be boolean or int")
 
-        nComplexes = filteredDB.index.size
+        nInteractions = df.index.size
         
-        print("Generating {} false protein protein interactions".format(nComplexes))
+        print("Generating {} false protein protein interactions".format(nInteractions))
         
         for n in range(numOfFalseComplex):
-            for idx1,idx2 in self._generateRandomIndexPairs(max=nComplexes-1):
+            for idx1,idx2 in self._generateRandomIndexPairs(max=filteredDB.size-1):
                 df = self._appendToDF(
                     df,
-                    nComplexes+n+1,
+                    nInteractions+n,
                     "Fake Complex {}".format(n),
                     self._getRandomEntry(filteredDB,idx1),
                     self._getRandomEntry(filteredDB,idx2),
                     "Non interactor"
                     )
         return df
-
-                
-
-
 
     def _getRandomEntry(self,filteredDB,idx):
         ""
@@ -97,15 +125,11 @@ class Database(object):
             idx = random.randint(0,len(entries)-1)
             return entries[idx]
 
-
-        
         
     def _generateRandomIndexPairs(self,min=0,max=100):
         ""
         yield (random.randint(min,max),random.randint(min,max))
         
-
-
 
     def _findPositiveInteractions(self,filteredDB, df, dbID, complexNameColumn):
         ""
@@ -127,8 +151,9 @@ class Database(object):
                            "ComplexName" : complexName,
                            "Entry1":entry1,
                            "Entry2":entry2,
+                           "E1;E2":"{};{}".format(entry1,entry2),
+                           "E2;E1":"{};{}".format(entry2,entry1),
                            "Class":predictClass}, ignore_index=True)
-        
 
 
     def _getPariwiseInteractions(self,entryList):
@@ -151,12 +176,38 @@ class Database(object):
     def _getPathToReferenceFiles(self):
         ""
         filePath = os.path.dirname(os.path.realpath(__file__))
+        mainPath = os.path.abspath(os.path.join(filePath ,"../.."))
         pathToReferenceFolder = os.path.join(
-                os.path.normpath(filePath + os.sep + os.pardir),
+                mainPath,
                 'reference-data'
             )
         return pathToReferenceFolder
 
+
+    def findComplex(self,pair,df):
+        e1,e2 = pair.split(";")
+        if e1 in df.index and e2 in df.index:
+            return df.loc[e1,e2].value
+
+    @property
+    def dbInteractions(self):
+        ""
+        return self.df.loc[:,['InteractionID','E1;E2','E2;E1',"Class"]]
+
+
+    def matchInteractions(self,):
+        ""
+        
+
+    def fillComplexMatrixFromData(self, X):
+        ""
+        if not isinstance(X, pd.DataFrame):
+            raise ValueError("X must be a pandas data frame with index and columns containg ID")
+        
+        return X.merge(self.df,how="left",left_index=True,right_on="E1;E2")
+
+
+        
 
 
 

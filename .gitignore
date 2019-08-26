@@ -3,8 +3,15 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# pdfs
+*.pdf
+
+
+
 # C extensions
 *.so
+
+
 
 # Distribution / packaging
 .Python

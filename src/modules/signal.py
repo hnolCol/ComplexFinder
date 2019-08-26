@@ -7,14 +7,15 @@ from lmfit import models
 import numpy.random as random
 import lmfit.models as lmModels
 from lmfit.parameter import Parameter
-
+import matplotlib.pyplot as plt
 
 
 class Signal(object):
 
-    def __init__(self, Y, nonNan = 4):
+    def __init__(self, Y, ID= "", peakModel = "", nonNan = 4):
 
         self.Y = Y 
+        self.ID = ID
 
     def _findNaNs(self,Y):
         "Finds nans in array"
@@ -48,9 +49,15 @@ class Signal(object):
             return self._movingAverage(self.Y,N)
         
     
-    def findPeaks(self,widths=[2,3]):
+    def findPeaks(self,cwt=False,widths=[2,3,4]):
 
-        peakDetection = sciSignal.find_peaks_cwt(self.Y,widths)
+        #
+        if cwt:
+            peakDetection = sciSignal.find_peaks_cwt(self.Y,widths)
+        else:
+            peakDetection, _ = sciSignal.find_peaks(self.Y)
+        print(peakDetection)
+
         return peakDetection
 
 
@@ -85,20 +92,20 @@ class Signal(object):
         self._addParam(modelParams,
                 name=prefix+'sigma', 
                 value = 3,
-                min = 1, 
-                max = 4)
+                min = 0.01, 
+                max = 6)
 
         self._addParam(modelParams,
                 name=prefix+'center', 
                 value = peakIdx[i],
-                min = 1, 
-                max = peakIdx[i] + 5)
+                min = peakIdx[i] - 1, 
+                max = peakIdx[i] + 1)
 
         self._addParam(modelParams,
                 name=prefix+'height', 
                 value = self.Y[peakIdx[i]],
-                min = 0.01, 
-                max = self.Y[peakIdx[i]] + self.Y[peakIdx[i]] * 0.5)
+                min = self.Y[peakIdx[i]] - self.Y[peakIdx[i]] * 0.05, 
+                max = self.Y[peakIdx[i]] + self.Y[peakIdx[i]] * 0.05)
 
 
     def _findParametersForModels(self,spec,peakIdx):
@@ -126,16 +133,21 @@ class Signal(object):
 
     def fitModel(self):
         ""
-        peakIdx = self.findPeaks()
-        self.spec = self._generateSpec(np.arange(self.Y.size) , self.Y, N = peakIdx.size)
-        modelComposite, params = self._findParametersForModels(self.spec,peakIdx)
-        self.fitOutput = modelComposite.fit(self.Y, params, x=self.spec['x'])
+        self.peakIdx = self.findPeaks()
+        if self.peakIdx.size < 22:
+            self.spec = self._generateSpec(np.arange(self.Y.size) , self.Y, N = self.peakIdx.size)
+            modelComposite, params = self._findParametersForModels(self.spec,self.peakIdx)
+            self.fitOutput = modelComposite.fit(self.Y, params, x=self.spec['x'])
+            self.plotSummary()
+        else:
+            print("too many peaks")
 
     @property
     def modeledPeaks(self):
         ""
-        print(self._collectPeakResults())
-        print(self._calculateSquredR())
+        if hasattr(self,"fitOutput"):
+            print(self._collectPeakResults())
+            print(self._calculateSquredR())
 
 
     def _collectPeakResults(self):
@@ -182,17 +194,22 @@ class Signal(object):
 
 
 
+
     def plotSummary(self, figure = None):
         ""
 
-        if figure is not None:
-            ax=plt.subplot(2, 2, 1)
-            for sigma in [1,2,5,6,10]:
-                x = np.arange(100)
-                #print(x)
-                y = self._lorentzianModel(x,5,sigma,20)
-                ax.plot(x,y)
-            plt.show()
+        if figure is None:
+            fig, ax = plt.subplots()
+            components = self.fitOutput.eval_components(x=self.spec['x'])
+            for i, model in enumerate(self.spec['model']):
+                ax.plot(self.spec['x'], components[f'm{i}_'], linestyle="-", linewidth=0.5)
+                ax.plot(self.spec['x'],self.Y , color="black" , linestyle="--", linewidth=0.5)
+            for peak in self.peakIdx:
+                ax.axvline(peak, color="darkgrey",linestyle="--")
+            plt.savefig("{}.pdf".format(self.ID))
+            plt.close()
+
+            
 
         
     #def _lorentzianModel(self,x,A,sigma,mu):

@@ -12,10 +12,12 @@ import matplotlib.pyplot as plt
 
 class Signal(object):
 
-    def __init__(self, Y, ID= "", peakModel = "", nonNan = 4):
+    def __init__(self, Y, ID= "", peakModel = "", nonNan = 4, maxPeaks = 15, savePlots = True , saveDir = ''):
 
         self.Y = Y 
         self.ID = ID
+        self.maxPeaks = maxPeaks
+        = savePlots 
 
     def _findNaNs(self,Y):
         "Finds nans in array"
@@ -86,20 +88,21 @@ class Signal(object):
            
         self._addParam(modelParams,
                             name=prefix+'amplitude',
-                            value = 1,
-                            min = 1e-6)
+                            max = self.Y[peakIdx[i]] * (np.pi**3),
+                            value = self.Y[peakIdx[i]] * 0.9,
+                            min = self.Y[peakIdx[i]] * 0.25)
 
         self._addParam(modelParams,
                 name=prefix+'sigma', 
                 value = 3,
-                min = 0.01, 
-                max = 6)
+                min = 0.5, 
+                max = 3)
 
         self._addParam(modelParams,
                 name=prefix+'center', 
                 value = peakIdx[i],
-                min = peakIdx[i] - 1, 
-                max = peakIdx[i] + 1)
+                min = peakIdx[i] - 0.75, 
+                max = peakIdx[i] + 0.75)
 
         self._addParam(modelParams,
                 name=prefix+'height', 
@@ -130,24 +133,36 @@ class Signal(object):
                 params.update(modelParams)
         return modelComposite,params
         
+    def _checkPeakIdx(self,peakIdx, maxPeaks = 15):
+        "Retrieves highest peaks"
+        if peakIdx.size <=  maxPeaks:
+            return peakIdx
+        else:
+            signal = self.Y[peakIdx]
+            indices = np.argpartition(signal, -maxPeaks)[-maxPeaks:]
+            return peakIdx[indices]
+
 
     def fitModel(self):
         ""
-        self.peakIdx = self.findPeaks()
-        if self.peakIdx.size < 22:
+        try:
+            peakIdx = self.findPeaks()
+            self.peakIdx = self._checkPeakIdx(peakIdx,self.maxPeaks)
             self.spec = self._generateSpec(np.arange(self.Y.size) , self.Y, N = self.peakIdx.size)
             modelComposite, params = self._findParametersForModels(self.spec,self.peakIdx)
             self.fitOutput = modelComposite.fit(self.Y, params, x=self.spec['x'])
-            self.plotSummary()
-        else:
-            print("too many peaks")
+            self.plotSummary(peakIdx.size > self.peakIdx.size)
+        except:
+           with open("{}.txt".format(self.ID),"w") as f:
+               f.write(str(self.spec))
+               f.write(str(self.Y))
 
     @property
     def modeledPeaks(self):
         ""
         if hasattr(self,"fitOutput"):
-            print(self._collectPeakResults())
-            print(self._calculateSquredR())
+            detectedPeaks = self._collectPeakResults()
+            squaredR = self._calculateSquredR()
 
 
     def _collectPeakResults(self):
@@ -193,20 +208,30 @@ class Signal(object):
         #plt.show()
 
 
-
-
-    def plotSummary(self, figure = None):
+    def plotSummary(self, peakNumReduced=False, figure = None):
         ""
 
-        if figure is None:
+        if figure is None and self.savePlots:
             fig, ax = plt.subplots()
             components = self.fitOutput.eval_components(x=self.spec['x'])
+            best_values = self.fitOutput.best_values
             for i, model in enumerate(self.spec['model']):
-                ax.plot(self.spec['x'], components[f'm{i}_'], linestyle="-", linewidth=0.5)
-                ax.plot(self.spec['x'],self.Y , color="black" , linestyle="--", linewidth=0.5)
+                prefix = f'm{i}_'
+                ax.plot(self.spec['x'], components[prefix], 
+                    linestyle="-", 
+                    linewidth=0.5, 
+                    label="s:{}, A:{}, c:{}".format(round(best_values[prefix+"sigma"],3),
+                                                            round(best_values[prefix+"amplitude"],3),
+                                                            round(best_values[prefix+"center"],2)
+                                                            
+                ))
+
+            ax.plot(self.spec['x'],self.Y , color="black" , linestyle="--", linewidth=0.5)
             for peak in self.peakIdx:
-                ax.axvline(peak, color="darkgrey",linestyle="--")
-            plt.savefig("{}.pdf".format(self.ID))
+                ax.axvline(peak, color="darkgrey",linestyle="--",linewidth=0.1)
+            ax.set_title("R^2:{} peaksRemoved:{}".format(self._calculateSquredR(),peakNumReduced))
+            ax.legend(prop={'size': 5})
+            plt.savefig("{}_{}.pdf".format(self.ID,peakNumReduced))
             plt.close()
 
             

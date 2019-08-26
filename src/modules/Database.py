@@ -1,6 +1,7 @@
 
 import os
 import pandas as pd
+import numpy as np
 import itertools
 import random 
 
@@ -42,7 +43,7 @@ class Database(object):
     def pariwiseProteinInteractions(self, 
                                     complexIDsColumn,
                                     dbID = "20190823_CORUM.txt", 
-                                    filterDb = {'Organism': ["Mouse"]}, 
+                                    filterDb = {'Organism': ["Human"]}, 
                                     complexNameColumn = "ComplexName",
                                     complexNameFilterString = None, 
                                     falsePositives=True, 
@@ -111,7 +112,7 @@ class Database(object):
                     "Fake Complex {}".format(n),
                     self._getRandomEntry(filteredDB,idx1),
                     self._getRandomEntry(filteredDB,idx2),
-                    "Non interactor"
+                    0
                     )
         return df
 
@@ -141,7 +142,7 @@ class Database(object):
                                     self.dbs[dbID].loc[i,complexNameColumn],
                                     interaction[0],
                                     interaction[1],
-                                    "Interactors")
+                                    1)
         
         return df
 
@@ -192,11 +193,27 @@ class Database(object):
     @property
     def dbInteractions(self):
         ""
-        return self.df.loc[:,['InteractionID','E1;E2','E2;E1',"Class"]]
+        return self.df
 
+    def matchRowsToMatrix(self,row,distM):
 
-    def matchInteractions(self,):
+        e1, e2 = str(row).split(";")
+
+        if e1 in distM.index and e2 in  distM.index:
+            return distM.loc[e1,e2]
+
+        else:
+            return np.nan 
+
+    def matchInteractions(self,columnLabel, distanceMatrix):
         ""
+
+        self.df[columnLabel] = self.df["E1;E2"].apply(lambda row, distM = distanceMatrix: self.matchRowsToMatrix(row,distM))
+
+    
+
+
+
         
 
     def fillComplexMatrixFromData(self, X):

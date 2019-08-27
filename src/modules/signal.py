@@ -17,7 +17,8 @@ class Signal(object):
         self.Y = Y 
         self.ID = ID
         self.maxPeaks = maxPeaks
-        = savePlots 
+        self.savePlots = savePlots 
+        self.saveDir = saveDir
 
     def _findNaNs(self,Y):
         "Finds nans in array"
@@ -212,6 +213,15 @@ class Signal(object):
         ""
 
         if figure is None and self.savePlots:
+            #
+            fileName = "{}_{}.pdf".format(self.ID,peakNumReduced)
+            if self.saveDir not in [None,"None",""]:
+                pathToSaveFigure = os.path.join(self.saveDir,fileName)
+                if not os.path.exists(pathToSaveFigure):
+                    pathToSaveFigure = fileName
+            else:
+                pathToSaveFigure = fileName
+
             fig, ax = plt.subplots()
             components = self.fitOutput.eval_components(x=self.spec['x'])
             best_values = self.fitOutput.best_values
@@ -229,9 +239,10 @@ class Signal(object):
             ax.plot(self.spec['x'],self.Y , color="black" , linestyle="--", linewidth=0.5)
             for peak in self.peakIdx:
                 ax.axvline(peak, color="darkgrey",linestyle="--",linewidth=0.1)
-            ax.set_title("R^2:{} peaksRemoved:{}".format(self._calculateSquredR(),peakNumReduced))
+            ax.set_title("R^2:{} peaksRemoved:{}".format(round(self._calculateSquredR(),3),
+                                                         peakNumReduced))
             ax.legend(prop={'size': 5})
-            plt.savefig("{}_{}.pdf".format(self.ID,peakNumReduced))
+            plt.savefig(pathToSaveFigure)
             plt.close()
 
             

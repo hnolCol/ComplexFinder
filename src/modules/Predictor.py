@@ -2,9 +2,11 @@
 
 
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import roc_curve, auc
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit
 import numpy as np
 from scipy import interp
 import matplotlib.pyplot as plt
@@ -13,8 +15,10 @@ from sklearn.cluster import OPTICS
 class Classifier(object):
     ""
 
-    def __init__(self, classifierClass = "random forest", n_jobs = 4):
+    def __init__(self, classifierClass = "random forest", n_jobs = 4, gridSearch = None):
         ""
+        self.gridSerach = gridSearch
+        self.n_jobs = n_jobs
         self.classifier = self._initClassifier(classifierClass,n_jobs)
 
 
@@ -24,20 +28,37 @@ class Classifier(object):
             return RandomForestClassifier(n_estimators=200,
                                             oob_score=True,
                                             min_samples_split=2,
-                                            max_depth=6,
                                             n_jobs=n_jobs)
 
     def _scaleFeatures(self,X):
 
-        X = StandardScaler().fit_transform(X)
-        return X 
+        return StandardScaler().fit_transform(X)
+        
+
+    def _gridOptimization(self,X,Y):
+
+        gridSearch = GridSearchCV(self.classifier, scoring = "f1", param_grid = self.gridSerach, n_jobs = self.n_jobs, cv = 10, verbose=5)
+        gridSearch.fit(X,Y)
+
+        print(gridSearch.best_estimator_.oob_score_)
+
+        return gridSearch.best_params_
 
 
-    def fit(self, X, Y):
+    def fit(self, X, Y, optimizedParams=None):
         ""
         print("predictor training started")
         X = self._scaleFeatures(X)
-        cv = StratifiedKFold(n_splits=6)
+
+        xTrain, xTest, yTrain, yTest = train_test_split(X,Y,test_size=0.25)
+
+
+        if self.gridSerach is not None:
+            optimizedParams = self._gridOptimization(X,Y)
+
+        cv = StratifiedShuffleSplit(n_splits=10, test_size=0.2)
+
+        #cv = StratifiedKFold(n_splits=3)
         
         tprs = []
         aucs = []
@@ -46,8 +67,13 @@ class Classifier(object):
         i=0
 
         for train, test in cv.split(X, Y):
+            if optimizedParams is not None:
+                self.classifier.set_params(**optimizedParams)
             probas_ = self.classifier.fit(X[train], Y[train]).predict_proba(X[test])
-            
+            print(self.classifier.feature_importances_)
+            print(self.classifier.oob_score_)
+            print(self.classifier.classes_)
+            print(probas_)
             # Compute ROC curve and area the curve
             fpr, tpr, thresholds = roc_curve(Y[test], probas_[:, 1])
             tprs.append(interp(mean_fpr, fpr, tpr))

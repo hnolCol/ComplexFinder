@@ -4,6 +4,10 @@ import pandas as pd
 import numpy as np
 import itertools
 import random 
+import gc 
+from joblib import Parallel, delayed
+
+import time
 
 class Database(object):
 
@@ -45,15 +49,13 @@ class Database(object):
                                     dbID = "20190823_CORUM.txt", 
                                     filterDb = {'Organism': ["Human"]}, 
                                     complexNameColumn = "ComplexName",
-                                    complexNameFilterString = None, 
-                                    falsePositives=True, 
-                                    matchSize=True):
+                                    complexNameFilterString = None):
+   
         ""
         if self._checkIfFilteredFileExists(dbID,filterDb):
 
             self.df = self._loadFile()
             print("File was saved already and is loaded")
-            return self.df
 
         else:
 
@@ -61,10 +63,46 @@ class Database(object):
             filteredDB = self._filterDb(dbID,filterDb,complexIDsColumn,complexNameColumn,complexNameFilterString)
             self.df = self._findPositiveInteractions(filteredDB,df,dbID,complexNameColumn)
             print("{} interactions found using the given filter criteria.".format(self.df.index.size))
-            if falsePositives:
-                self.df = self._generateFalseInterctions(self.df,filteredDB, matchSize)
             self._saveFilteredDf(dbID)
-            return self.df 
+
+
+    def addDecoy(self):
+        ""
+        complexIdx = np.unique(self.df["ComplexID"])
+        complexMembers = self.df["ComplexID"].value_counts()
+        nData = len(self.df.index)
+        randCombinations = np.random.randint(low=0,high=complexIdx.size, size = (nData,2))
+        decoyData = []
+
+        print("creating decoy db for {} interactions".format(nData))
+        for n,(x1,x2) in enumerate(randCombinations):
+            e1Idx = np.random.randint(0,complexMembers.loc[complexIdx[x1]]) 
+            e2Idx = np.random.randint(0,complexMembers.loc[complexIdx[x2]]) 
+            e1 =  self.df[self.df["ComplexID"] == complexIdx[x1]].iloc[e1Idx]["E1"]
+            e2 =  self.df[self.df["ComplexID"] == complexIdx[x2]].iloc[e2Idx]["E2"]
+
+            decoyData.append({"ComplexID":"F({})".format(n),"E1":e1,"E2":e2,"complexName":"Fake({})".format(n),"Class":0})
+
+            if n % 60 == 0:
+                print(n/nData*100, "% done")
+        
+        df = pd.concat([self.df,pd.DataFrame(decoyData)],ignore_index=True)
+        df.index = np.arange(0,df.index.size)
+        boolSelfInt = df["E1"] == df["E2"]
+        self.df = df.loc[boolSelfInt == False,:]
+        print("creating decoy is done..")
+
+
+    def filterDBByEntryList(self,entryList):
+
+
+        dbEntries = self.df[['E1', 'E2']].values
+        print("entries in DB:", str(self.df.index.size))
+
+        boolIdx = [e1 in entryList and e2 in entryList for e1,e2 in dbEntries]
+        self.df = self.df.loc[boolIdx,:]
+        print("filtered database, new size: ",str(self.df.index.size))
+
 
     def _loadFile(self):
         ""
@@ -104,17 +142,29 @@ class Database(object):
         
         print("Generating {} false protein protein interactions".format(nInteractions))
         
-        for n in range(numOfFalseComplex):
-            for idx1,idx2 in self._generateRandomIndexPairs(max=filteredDB.size-1):
-                df = self._appendToDF(
-                    df,
-                    nInteractions+n,
-                    "Fake Complex {}".format(n),
-                    self._getRandomEntry(filteredDB,idx1),
-                    self._getRandomEntry(filteredDB,idx2),
-                    0
-                    )
-        return df
+        maxInt = filteredDB.size-1
+
+        allInteractors = pd.unique(df[['E1', 'E2']].values.ravel('K'))
+       # randomParis =  Parallel(n_jobs=4)(delayed(self._generateRandomIndexPairs)(max=maxInt) for n in range(numOfFalseComplex))
+
+
+        falsePairs = Parallel(n_jobs=4)(delayed(self.randomPairs)(n, max=maxInt, allInteractors = allInteractors, nInts = allInteractors.size-1) for n in range(numOfFalseComplex))
+
+        return pd.concat([df,pd.DataFrame(falsePairs)])
+
+
+    def _getRandomEntries(self,allInteractors,idxPair):
+        idx1,idx2 = idxPair
+        return (self._getRandomEntry(filteredDB,idx1),
+                self._getRandomEntry(filteredDB,idx2))
+
+    def randomPairs(self,n,max,allInteractors,nInts):
+
+        x1, x2 = random.randint(0,nInts), random.randint(0,nInts)
+        e1, e2 = allInteractors[x1], allInteractors[x2]
+        
+        return {"ComplexID":nInts+n,"E1":e1,"E2":e2,"complexName":"Fake({})".format(n),"Class":0}
+
 
     def _getRandomEntry(self,filteredDB,idx):
         ""
@@ -129,31 +179,32 @@ class Database(object):
         
     def _generateRandomIndexPairs(self,min=0,max=100):
         ""
-        yield (random.randint(min,max),random.randint(min,max))
+        return (random.randint(min,max),random.randint(min,max))
         
+
+    def collectPairwiseInt(self,i,interactors,complexName,predictClass):
+
+        collectedResult = []
+        for interaction in self._getPariwiseInteractions(interactors.split(";")):
+               collectedResult.append({"ComplexID":i,"E1":interaction[0],"E2":interaction[1],"complexName":complexName,"Class":predictClass})
+        return collectedResult
+
+
 
     def _findPositiveInteractions(self,filteredDB, df, dbID, complexNameColumn):
         ""
-        for i, interactors in filteredDB.iteritems():
 
-            for interaction in self._getPariwiseInteractions(interactors.split(";")):
-                df = self._appendToDF(df,
-                                    df.index.size,
-                                    self.dbs[dbID].loc[i,complexNameColumn],
-                                    interaction[0],
-                                    interaction[1],
-                                    1)
+        pairWise =  Parallel(n_jobs=4)(delayed(self.collectPairwiseInt)(i,interactors,self.dbs[dbID].loc[i,complexNameColumn],1) for i, interactors in filteredDB.iteritems())
         
+        df = pd.DataFrame([item for sublist in pairWise for item in sublist])
         return df
 
     def _appendToDF(self,df,ID,complexName,entry1,entry2,predictClass):
                         
         return df.append({"InteractionID": ID,
                            "ComplexName" : complexName,
-                           "Entry1":entry1,
-                           "Entry2":entry2,
-                           "E1;E2":"{};{}".format(entry1,entry2),
-                           "E2;E1":"{};{}".format(entry2,entry1),
+                           "E1":entry1,
+                           "E2":entry2,
                            "Class":predictClass}, ignore_index=True)
 
 
@@ -196,14 +247,113 @@ class Database(object):
         return self.df
 
     def matchRowsToMatrix(self,row,distM):
-
+        ""
         e1, e2 = str(row).split(";")
 
         if e1 in distM.index and e2 in  distM.index:
-            return distM.loc[e1,e2]
+            return distM.loc[e1,e2] if distM.loc[e1,e2] != np.nan else distM.loc[e2,e1]
 
         else:
             return np.nan 
+
+    def findMatch(self,x,metricDf, mCols):
+
+        search = str(x[0]) + str(x[1])
+        if search in metricDf["E1E2"].values:
+            return metricDf.loc[metricDf["E1E2"] == search,mCols]
+        elif search in metricDf["E2E1"].values:
+            return metricDf.loc[metricDf["E2E1"] == search,mCols]
+
+
+    def matchMetrices(self,pathToTmp):#metricDf):
+        ""
+        distanceFile = os.path.join(pathToTmp,"DBdistances.txt")
+        if os.path.exists(distanceFile):
+            print("file found and loaded")
+            self.df = pd.read_csv(distanceFile, sep="\t", index_col=False)
+
+        else:
+
+            txtFiles = [f for f in os.listdir(pathToTmp) if f.endswith(".npy")]
+            metricColumns = ["apex","euclidean","pearson","p_pearson","max_location"]
+            t1 = time.time()
+            newDBData = []
+
+            newDBData = Parallel(n_jobs=4,verbose=10,prefer="threads")(delayed(self.findInteraction)(idx,txtFiles,pathToTmp,metricColumns) for idx in self.df.index)
+
+        #    for idx in self.df.index:
+         #       dataDir = self.findInteraction(idx,txtFiles,pathToTmp,metricColumns)
+          #      if dataDir is not None:
+           #         newDBData.append(dataDir)
+#
+   #             if idx % 100 == 0:
+ #                   print(idx, " matches of metrices to DB done.")
+  #              
+
+            print("Time to macht Interactions for: ",time.time()-t1)
+
+
+            self.df = pd.DataFrame([x for x in newDBData if x is not None])
+
+            self.df.to_csv(os.path.join(pathToTmp,"DBdistances.txt"),sep="\t", index=False)
+
+
+
+
+    def findInteraction(self,idx,txtFiles,pathToTmp,metricColumns):
+            dataDir = {}
+
+            E1, E2 = self.df.loc[idx,"E1"], self.df.loc[idx,"E2"]
+
+            fileE1 = E1 + ".npy"
+            fileE2 = E2 + ".npy"
+
+            if fileE1 in txtFiles:
+
+                df = np.load(os.path.join(pathToTmp,fileE1)) # read_csv(os.path.join(pathToTmp,fileE1), index_col=False)
+
+                if E2 in df[:,1]:
+
+                    boolIdx = df[:,1] == E2
+                    dataDir = {metric:df[boolIdx,n+2][0] for n,metric in enumerate(metricColumns)}
+
+            if fileE2 in txtFiles:
+                
+                df = np.load(os.path.join(pathToTmp,fileE2))
+
+                if E1 in df[:,1]:
+
+                    boolIdx = df[:,1] == E1
+                    dataDir = {metric:df[boolIdx,n + 2][0] for n,metric in enumerate(metricColumns)}
+            
+
+            if len(dataDir) > 0:
+
+                dataDir["E1"] = E1
+                dataDir["E2"] = E2 
+                dataDir["Class"] = self.df.loc[idx,"Class"]   
+                del df
+                gc.collect()  
+                return dataDir
+
+            
+
+        
+        
+
+#        boolIdx = self.df[["E1","E2"]].apply(lambda x, df = metricDf, mCols = metricColumn :self.findMatch(x,df, mCols) , axis=1)
+ #       print(boolIdx)
+
+  #      print("HWWWW")
+   #     print(metricDf)
+    #    print(self.df)
+     #  # print(self.df.columns)
+        #self.df = self.df.merge(metricDf, how="inner", on = ["E1","E2"])
+      #  print(self.df)
+       # #df = self.df.merge(metricDf, how="inner", on = ["E2","E2"])
+       
+       # boolIdx = metricDF[["E1","E2"]].apply(axis=1)
+        
 
     def matchInteractions(self,columnLabel, distanceMatrix):
         ""

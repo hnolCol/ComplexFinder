@@ -6,6 +6,7 @@ __pycache__/
 # pdfs
 *.pdf
 
+/src/tmp
 
 
 # C extensions

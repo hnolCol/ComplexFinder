@@ -4,13 +4,25 @@ import pandas as pd
 import itertools
 from scipy.spatial.distance import pdist
 from scipy.spatial.distance import squareform
+from scipy.stats import pearsonr
+from joblib import Parallel, delayed
+
+import gc 
+
 class DistanceCalculator(object):
 
     def __init__(self):
         ""
-        #print(self.euclidean(X))
-        #print(self.pearson(X))
 
+    def p_pears(self,u,v):
+        "returns p value for pearson correlation"
+        _, p = pearsonr(u,v)
+
+        return p
+
+    def p_pearson(self,X):
+        ""
+        return squareform(pdist(X,self.p_pears))
 
     def pearson(self,X, rowvar=True):
         ""
@@ -19,15 +31,24 @@ class DistanceCalculator(object):
 
     def euclidean(self,X):
         ""
+        print("Euclidean distance calculation")
         return squareform(pdist(X,"euclidean"))
 
 
     def apex(self,X):
+        
+        otherSignals = [(Signal.ID,Signal._collectPeakResults()) for Signal in X]
+        distM = []#Parallel(n_jobs=n_jobs)(delayed(Signal.calculateApexDistance)(otherSignals) for Signal in X)
+        signalIds = [x[0] for x in otherSignals]
+        df = pd.DataFrame(columns=["E1;E2","metric"])
+        for n,Signal in enumerate(X):
+            
+            df = df.append(Signal.calculateApexDistance(otherSignals,n), ignore_index = True)
+            gc.collect()
 
-        if X.size[1] != 2:
-            raise ValueError("X must be of size (,2) containg mu and sigma")
 
-        return squareform(pdist(X,lambda e1,e2: self.apexScore(e1,e2)))
+
+        return df
 
         
     def apexScore(self, entry1, entry2):
@@ -45,17 +66,29 @@ class DistanceCalculator(object):
             df = df.append({"idx":"{};{}".format(e1,e2),
                        "distance":distMatrix.loc[e1,e2]},
                 ignore_index=True)
+
         return df
 
 
     def getDistanceMatrix(self,X, distance="pearson", longFormOutput=False):
         ""
-        if hasattr(self,distance):
+        if hasattr(self,distance) and distance != "apex":
             distM = getattr(self, distance)(X)
             if longFormOutput:
                 return self._transformToLong(X.index,distM,distance)
             else:
                 return distM
+
+        elif distance == "apex":
+
+            if not isinstance(X,list):
+                raise ValueError("X must be list for apex distance")
+            print("Apex calculation started ..")
+            distM = self.apex(X)
+
+            return distM
+
+        
                 
         raise ValueError("Distance unknown.")
 

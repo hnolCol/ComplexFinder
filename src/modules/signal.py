@@ -1,6 +1,7 @@
 import pandas as pd 
 import numpy as np 
-
+import os
+import gc
 import scipy.signal as sciSignal 
 import matplotlib.pyplot as plt
 from lmfit import models
@@ -8,17 +9,20 @@ import numpy.random as random
 import lmfit.models as lmModels
 from lmfit.parameter import Parameter
 import matplotlib.pyplot as plt
-
-
+from joblib import Parallel, delayed
+from scipy.stats import pearsonr
+import time
 class Signal(object):
 
-    def __init__(self, Y, ID= "", peakModel = "", nonNan = 4, maxPeaks = 15, savePlots = True , saveDir = ''):
+    def __init__(self, Y, ID= "", peakModel = "", nonNan = 4, maxPeaks = 8, savePlots = True , saveDir = '', metrices = [], pathToTmp = ""):
 
         self.Y = Y 
         self.ID = ID
         self.maxPeaks = maxPeaks
         self.savePlots = savePlots 
         self.saveDir = saveDir
+        self.metrices = metrices
+        self.pathToTmp = pathToTmp
 
     def _findNaNs(self,Y):
         "Finds nans in array"
@@ -59,7 +63,6 @@ class Signal(object):
             peakDetection = sciSignal.find_peaks_cwt(self.Y,widths)
         else:
             peakDetection, _ = sciSignal.find_peaks(self.Y)
-        print(peakDetection)
 
         return peakDetection
 
@@ -148,14 +151,15 @@ class Signal(object):
         ""
         try:
             peakIdx = self.findPeaks()
-            self.peakIdx = self._checkPeakIdx(peakIdx,self.maxPeaks)
-            self.spec = self._generateSpec(np.arange(self.Y.size) , self.Y, N = self.peakIdx.size)
-            modelComposite, params = self._findParametersForModels(self.spec,self.peakIdx)
-            self.fitOutput = modelComposite.fit(self.Y, params, x=self.spec['x'])
-            self.plotSummary(peakIdx.size > self.peakIdx.size)
+            peakIdx = self._checkPeakIdx(peakIdx,self.maxPeaks)
+            spec = self._generateSpec(np.arange(self.Y.size) , self.Y, N = peakIdx.size)
+            modelComposite, params = self._findParametersForModels(spec,peakIdx)
+            fitOutput = modelComposite.fit(self.Y, params, x=spec['x'])
+            #self.plotSummary(peakIdx.size > self.peakIdx.size)
+            return {"id":self.ID,"fitOutput":fitOutput,'spec':spec,'peakIdx':peakIdx}
         except:
            with open("{}.txt".format(self.ID),"w") as f:
-               f.write(str(self.spec))
+               f.write(str(spec))
                f.write(str(self.Y))
 
     @property
@@ -165,10 +169,133 @@ class Signal(object):
             detectedPeaks = self._collectPeakResults()
             squaredR = self._calculateSquredR()
 
+    def _apex(self,p1,p2):
+        ""
+        
+        return np.sqrt( (p1['mu'] - p2['mu']) ** 2  + (p1['sigma'] - p2['sigma']) ** 2 )
+
+
+    def p_pears(self,u,v):
+        "returns p value for pearson correlation"
+        r, p = pearsonr(u,v)
+
+        return r, p
+
+    def euclideanDistance(self,Ys):
+        ""
+        return [np.linalg.norm(self.Y - Y) for Y in Ys]
+
+    def pearson(self,Ys):
+        ""
+        return [self.p_pears(self.Y,Y) for Y in Ys]
+       
+    def apex(self,otherSignalPeaks):
+        ""
+        ownPeaks = self._collectPeakResults()
+        apexDist = []     
+        for otherPeaks in otherSignalPeaks:
+
+            apexDist.append([self._apex(p1,p2) for p1 in ownPeaks for p2 in otherPeaks])
+
+        return [np.min(x) for x in apexDist]
+
+    def calculateMetrices(self,ID):
+
+        metrices = self.metrices
+        pathToTmp = self.pathToTmp 
+        otherSignals = self.otherSignals
+
+        pathToFile = os.path.join(pathToTmp,"{}".format(self.ID))
+
+        if os.path.exists(pathToFile):
+            pass
+
+        else:
+
+            collectedDf = pd.DataFrame()
+
+            collectedDf["E1"] = [self.ID] * len(otherSignals)
+            collectedDf["E2"] = [Signal.ID for Signal in otherSignals]
+            
+            for metric in metrices:
+
+                Ys = np.array([Signal.Y for Signal in otherSignals])
+                
+                if metric == "pearson":
+                    collectedDf["pearson"], collectedDf["p_pearson"] = zip(*self.pearson(Ys))
+                    collectedDf["pearson"] = 1 - collectedDf["pearson"].values 
+
+                elif metric == "euclidean":
+
+                    collectedDf["euclidean"] = self.euclideanDistance(Ys)
+                        
+                elif metric == "apex":
+                    otherSignalPeaks = [Signal._collectPeakResults() for Signal in otherSignals]
+
+                    collectedDf["apex"] = self.apex(otherSignalPeaks)
+
+                elif metric == "max_location":
+
+                    maxOwnY = np.argmax(self.Y)
+                    collectedDf["max_location"] = [np.argmax(Signal.Y)-maxOwnY for Signal in otherSignals]
+            gc.collect()
+            return collectedDf.values
+            #collectedDf.to_csv(pathToFile, index=False)
+
+
+
+
+
+     #   for Signal in otherSignals:
+
+      #      e2.append(ID)
+
+          #  for metric in metrices:
+#
+            #    if metric in ['pearson']:
+
+                #    r, p = getattr(self,"metric")(otherPeaks)
+
+
+                
+    def calculateApexDistance(self,otherSignals,n):
+        ""
+        ownPeaks = self._collectPeakResults()
+        df = pd.DataFrame()
+        
+        indices = []
+        apexDist = []
+
+        for ID, otherPeaks in otherSignals[n:]:
+
+            #distToOtherPeaks = Parallel(n_jobs=4)(delayed(self._apex)(p1,p2) for p1 in ownPeaks for p2 in otherPeaks)
+            distToOtherPeaks = [self._apex(p1,p2) for p1 in ownPeaks for p2 in otherPeaks]
+            #append results
+            indices.append(ID)
+            if len(distToOtherPeaks) == 0:
+                apexDist.append(np.nan)
+            else:
+                apexDist.append(np.min(distToOtherPeaks))
+        df["E1;E2"] = ["{};{}".format(self.ID,idx) for idx in indices]
+        df["metric"] = apexDist
+
+        return df
+
+
+
 
     def _collectPeakResults(self):
         "Put results of peaks in a list"
-        peaks = []
+
+        if hasattr(self,"modelledPeaks"):
+
+            return self.modelledPeaks
+
+        if not hasattr(self , "fitOutput"):
+
+            return []
+
+        self.modelledPeaks = []
         best_values = self.fitOutput.best_values
         for i, model in enumerate(self.spec['model']):
             params = {}
@@ -176,9 +303,9 @@ class Signal(object):
             params['ID'] = i
             params["mu"] = best_values[prefix+"center"]
             params["sigma"] = best_values[prefix+"sigma"]
-            peaks.append(params)
+            self.modelledPeaks.append(params)
 
-        return peaks
+        return self.modelledPeaks
 
     def _calculateSquredR(self):
         ""
@@ -245,6 +372,11 @@ class Signal(object):
             plt.savefig(pathToSaveFigure)
             plt.close()
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        if "fitOutput" in state:
+            del state["fitOutput"]
+        return state
             
 
         

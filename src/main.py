@@ -20,10 +20,10 @@ filePath = os.path.dirname(os.path.realpath(__file__))
 pathToTmp = os.path.join(filePath,"tmp")
 
 RF_GRID_SEARCH = {#'bootstrap': [True, False],
- 'max_depth': [50, 60, 70,80,  None],
+ 'max_depth': [70,80, None],
  'max_features': ['sqrt','auto'],
- 'min_samples_leaf': [2, 3,5],
- 'min_samples_split': [2, 3,5],
+ 'min_samples_leaf': [2, 3],
+ 'min_samples_split': [2, 3],
  'n_estimators': [300]}
 
 
@@ -36,20 +36,17 @@ def chunks(l, n):
 class SignalHelper(object):
 
     ""
-    def __init__(self,id,signals,funcName):
+    def __init__(self,id,signals,funcName,pathToTmp):
 
-
-        data = np.empty(shape=(1,7))
+        data = np.array([])
         for signal in signals:
             data = np.append(data,getattr(signal,funcName)(id))
 
-        self.saveChunks(str(id),data)
+        self.saveChunks(str(id),data,pathToTmp)
     
-    def saveChunks(self,fileName,data):
+    def saveChunks(self,fileName,data,pathToTmp):
 
-        print("savve")
-        print(data)
-        np.save(fileName,data)
+        np.save(os.path.join(pathToTmp,fileName),data)
 
 
 class ComplexFinder(object):
@@ -63,6 +60,7 @@ class ComplexFinder(object):
                 databaseName="CORUM",
                 peakModel = "Lorentzian",
                 imputeNaN = True,
+                interactionProbabCutoff = 0.85,
                 metrices = ["apex","euclidean","pearson","p_pearson","max_location"],
                 classiferGridSearch = RF_GRID_SEARCH):
         ""
@@ -76,6 +74,7 @@ class ComplexFinder(object):
             "imputeNaN" : imputeNaN,
             "metrices" : metrices,
             "peakModel" : peakModel,
+            "interactionProbabCutoff":interactionProbabCutoff,
             "maxPeaksPerSignal" : maxPeaksPerSignal,
             "classiferGridSearch" : classiferGridSearch
             }
@@ -117,7 +116,7 @@ class ComplexFinder(object):
         pathToSignal = os.path.join(self.params["pathToTmp"],"signals.lzma")
         if os.path.exists(pathToSignal):
             self.Signals = load(pathToSignal)
-            print("loading pickled signal intensity")
+            print("\nLoading pickled signal intensity")
         else:
             self.Signals = OrderedDict()
             peakModel = self.params['peakModel']
@@ -132,61 +131,38 @@ class ComplexFinder(object):
 
             
             t1 = time.time()
-            print("starting parallel Signal modelling .. (n_jobs = {})".format(n_jobs))
-            fittedModels = Parallel(n_jobs=n_jobs)(delayed(Signal.fitModel)() for Signal in self.Signals.values())
+            print("\n\nStarting Signal modelling .. (n_jobs = {})".format(n_jobs))
+            fittedModels = Parallel(n_jobs=n_jobs, verbose=1)(delayed(Signal.fitModel)() for Signal in self.Signals.values())
             self._addModelToSignals(fittedModels)
-            print("Peak fitting done time : {} minutes".format(round((time.time()-t1)/60)))
+            print("Peak fitting done time : {} secs".format(round((time.time()-t1))))
         
         dump(self.Signals,pathToSignal)
 
-
-        
-       # for entryID, signal in self.X.iterrows():
-       #     print(entryID)
-        #    print(signal.values)
-       #     s = Signal(signal.values,ID=entryID,peakModel=peakModel)
-        #    s.fitModel()
-          #  s.modeledPeaks
 
 
     def _calculateDistance(self):
         ""
         X = list(self.Signals.values())
-        print("Starting Distance Calculation ..")
+        print("\n\nStarting Distance Calculation ...")
         t1 = time.time()
-       # t1 = time.time()
-       # Parallel(n_jobs=6, prefer="processes")(delayed(Signal.calculateMetrices)(otherSignals = X[n:], 
-         #                                                    metrices=self.params["metrices"],
-        #                                                     pathToTmp = self.params["pathToTmp"]) for n,Signal in enumerate(self.Signals.values()))
-        #print("Paralllel job",time.time()-t1)
+
         for n,Signal in enumerate(self.Signals.values()):
             setattr(Signal,"otherSignals", X[n:])
+
         nSignals = len(self.Signals)
 
+        Parallel(n_jobs=self.params["n_jobs"], prefer="threads",verbose=5)(delayed(SignalHelper)(id=n,
+                                    signals=chunk,
+                                    funcName="calculateMetrices",
+                                    pathToTmp=self.params["pathToTmp"]) for n,chunk in enumerate(chunks(list(self.Signals.values()),25)))
 
-      #  Parallel(n_jobs=self.params["n_jobs"], prefer="threads",verbose=20)(delayed(SignalHelper)(id=n,signals=chunk,funcName="calculateMetrices") for n,chunk in enumerate(chunks(list(self.Signals.values()),4)))
-        for n, chunk in enumerate(chunks(list(self.Signals.values()),4)):
-                SignalHelper(id=n,signals=chunk,funcName="calculateMetrices")
-        #pool = Pool(5) # run 10 task at most in parallel
-        # pool.map(compute_cluster, range(10))
-
-        print("parallel computing: {} secs".format(round(time.time()-t1))
-      #  t1 = time.time()
-      #  nSignals = len(self.Signals)
-      #  for n,Signal in enumerate(self.Signals.values()):
-       #     Signal.calculateMetrices(otherSignals = X[n:], 
-                                    )
-        #    if n % int(nSignals*0.15) == 0:
-         #       print("{} % done".format(round(n/nSignals*100,2)))
-        
-       # print("Time to calculate / load distances {} minutes".format(round(time.time()-t1)/60))
-
+        print("Distance computing: {} secs\n".format(round(time.time()-t1)))
 
         
     def _loadReferenceDB(self):
         ""
-       # completeDf = pd.DataFrame()
-        print("load data base")
+
+        print("Load positive data base")
         self.DB = Database()
         self.DB.pariwiseProteinInteractions("subunits(UniProt IDs)")
         self.DB.filterDBByEntryList(self.X.index)
@@ -204,15 +180,56 @@ class ComplexFinder(object):
         data = self.DB.df[totalColumns].dropna(subset=metricColumns)
         self.Y = data['Class'].values
         X = data.loc[:,metricColumns].values
-        print(self.Y.size)
-        print(X)
-        print("YYY")
-        print(self.Y)
 
         self.classifier = Classifier(
             n_jobs=self.params['n_jobs'], 
-            gridSearch = self.params["classiferGridSearch"]).fit(X,self.Y)
+            gridSearch = self.params["classiferGridSearch"])
 
+        self.classifier.fit(X,self.Y)
+
+    def _loadPairs(self):
+
+        chunks = [f for f in os.listdir(self.params["pathToTmp"]) if f.endswith(".npy")]
+        pathToPredict = os.path.join(self.params["pathToTmp"],"predictions")
+        if not os.path.exists(pathToPredict):
+            os.mkdir(pathToPredict)
+        print("\nPrediction started...")
+        for chunk in chunks:
+
+            X = np.load(os.path.join(self.params["pathToTmp"],chunk),allow_pickle=True).reshape(-1,7)
+            
+            yield (X, os.path.join(pathToPredict,chunk))
+            
+           
+
+    def _predictInteractions(self):
+        ""
+        predInteractions = None
+        for X,pathToChunk in self._loadPairs():
+            boolSelfIntIdx = X[:,0] == X[:,1] 
+
+            X = X[boolSelfIntIdx == False]
+            classProba = self.classifier.predict(X[:,[n+2 for n in range(5)]])
+            
+            predX = np.append(X,classProba,axis=1)
+            print(predX)
+            boolPredIdx = classProba[:,1] >= self.params["interactionProbabCutoff"]
+            if predInteractions is None:
+                predInteractions = predX[boolPredIdx]
+            else:
+                predInteractions = np.append(predInteractions,predX[boolPredIdx], axis=0)
+
+            print(predInteractions)
+            np.save(
+                file = pathToChunk,
+                arr = predX)
+
+
+        self.predInteractions = predInteractions
+        print(self.predInteractions)
+        print(self.predInteractions.size)
+
+        pd.DataFrame(self.predInteractions).to_csv("OUTPUT.txt", sep="\t")
 
     def _randomStr(self,n):
 
@@ -251,13 +268,14 @@ class ComplexFinder(object):
         self.params["pathToTmp"] = pathToTmpFolder
 
         if pathToTmpFolder is not None:
-        
+            
             self._load(X)
             self._findPeaks(self.params["n_jobs"])
             self._calculateDistance()
             self._loadReferenceDB()
             self._addMetricesToDB()
             self._trainPredictor()
+            self._predictInteractions()
         
 
 
@@ -268,7 +286,7 @@ if __name__ == "__main__":
     ]))
 
     X = pd.read_csv("../example-data/HeuselEtAlAebersoldLab.txt", 
-                    sep="\t", nrows=50)
+                    sep="\t")#, nrows=200)
 
  #X = X.set_index("Uniprot ID")
   #  X

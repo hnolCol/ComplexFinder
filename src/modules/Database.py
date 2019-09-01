@@ -74,7 +74,7 @@ class Database(object):
         randCombinations = np.random.randint(low=0,high=complexIdx.size, size = (nData,2))
         decoyData = []
 
-        print("creating decoy db for {} interactions".format(nData))
+        print("\nCreating decoy db for {} interactions".format(nData))
         for n,(x1,x2) in enumerate(randCombinations):
             e1Idx = np.random.randint(0,complexMembers.loc[complexIdx[x1]]) 
             e2Idx = np.random.randint(0,complexMembers.loc[complexIdx[x2]]) 
@@ -83,14 +83,14 @@ class Database(object):
 
             decoyData.append({"ComplexID":"F({})".format(n),"E1":e1,"E2":e2,"complexName":"Fake({})".format(n),"Class":0})
 
-            if n % 60 == 0:
-                print(n/nData*100, "% done")
+            if n % 30 == 0:
+                print(round(n/nData*100,2), "% done")
         
         df = pd.concat([self.df,pd.DataFrame(decoyData)],ignore_index=True)
         df.index = np.arange(0,df.index.size)
         boolSelfInt = df["E1"] == df["E2"]
         self.df = df.loc[boolSelfInt == False,:]
-        print("creating decoy is done..")
+        print("\nCreating decoy is done..")
 
 
     def filterDBByEntryList(self,entryList):
@@ -269,7 +269,7 @@ class Database(object):
         ""
         distanceFile = os.path.join(pathToTmp,"DBdistances.txt")
         if os.path.exists(distanceFile):
-            print("file found and loaded")
+            print("File found and loaded")
             self.df = pd.read_csv(distanceFile, sep="\t", index_col=False)
 
         else:
@@ -279,7 +279,10 @@ class Database(object):
             t1 = time.time()
             newDBData = []
 
-            newDBData = Parallel(n_jobs=4,verbose=10,prefer="threads")(delayed(self.findInteraction)(idx,txtFiles,pathToTmp,metricColumns) for idx in self.df.index)
+            newDBData = Parallel(n_jobs=4,verbose=10,prefer="threads")(delayed(self.findInteraction)(self.df.loc[idx,"E1"],
+                        self.df.loc[idx,"E2"],
+                        self.df.loc[idx,"Class"],   
+                        txtFiles,pathToTmp,metricColumns) for idx in self.df.index)
 
         #    for idx in self.df.index:
          #       dataDir = self.findInteraction(idx,txtFiles,pathToTmp,metricColumns)
@@ -294,47 +297,76 @@ class Database(object):
 
 
             self.df = pd.DataFrame([x for x in newDBData if x is not None])
-
+            print(self.df)
             self.df.to_csv(os.path.join(pathToTmp,"DBdistances.txt"),sep="\t", index=False)
 
 
 
 
-    def findInteraction(self,idx,txtFiles,pathToTmp,metricColumns):
-            dataDir = {}
+    def findInteraction(self,E1,E2,className,txtFiles,pathToTmp,metricColumns):
+            for f in txtFiles:
 
-            E1, E2 = self.df.loc[idx,"E1"], self.df.loc[idx,"E2"]
+                data = np.load(os.path.join(pathToTmp,f),allow_pickle=True).reshape(-1,7)
 
-            fileE1 = E1 + ".npy"
-            fileE2 = E2 + ".npy"
-
-            if fileE1 in txtFiles:
-
-                df = np.load(os.path.join(pathToTmp,fileE1)) # read_csv(os.path.join(pathToTmp,fileE1), index_col=False)
-
-                if E2 in df[:,1]:
-
-                    boolIdx = df[:,1] == E2
-                    dataDir = {metric:df[boolIdx,n+2][0] for n,metric in enumerate(metricColumns)}
-
-            if fileE2 in txtFiles:
-                
-                df = np.load(os.path.join(pathToTmp,fileE2))
-
-                if E1 in df[:,1]:
-
-                    boolIdx = df[:,1] == E1
-                    dataDir = {metric:df[boolIdx,n + 2][0] for n,metric in enumerate(metricColumns)}
+                boolIdx = np.logical_and(data[:,0] == E1, data[:,1] == E2)
             
 
-            if len(dataDir) > 0:
+                if any(boolIdx):
+                    dataDir = {metric:data[boolIdx,n+2][0] for n,metric in enumerate(metricColumns)}
+
+                else:
+                   # boolIdx = data[:,2] == E1 + data[:,1] == E2
+                    boolIdx = np.logical_and(data[:,1] == E1, data[:,0] == E2)
+                    if any(boolIdx):
+                        dataDir = {metric:data[boolIdx,n+2][0] for n,metric in enumerate(metricColumns)}
+
+                    else:
+                        continue
 
                 dataDir["E1"] = E1
                 dataDir["E2"] = E2 
-                dataDir["Class"] = self.df.loc[idx,"Class"]   
-                del df
+                dataDir["Class"] = className  
+                del data
                 gc.collect()  
                 return dataDir
+
+
+
+
+      #      dataDir = {}
+
+            
+
+       #     fileE1 = E1 + ".npy"
+       #     fileE2 = E2 + ".npy"#
+#
+#            if fileE1 in txtFiles:
+#
+ #               df = np.load(os.path.join(pathToTmp,fileE1)) # read_csv(os.path.join(pathToTmp,fileE1), index_col=False)
+#
+ #               if E2 in df[:,1]:
+#
+ #                   boolIdx = df[:,1] == E2
+  ##                  dataDir = {metric:df[boolIdx,n+2][0] for n,metric in enumerate(metricColumns)}
+#
+ #           if fileE2 in txtFiles:
+                
+ #               df = np.load(os.path.join(pathToTmp,fileE2))
+#
+  #              if E1 in df[:,1]:
+
+   #                 boolIdx = df[:,1] == E1
+    #                dataDir = {metric:df[boolIdx,n + 2][0] for n,metric in enumerate(metricColumns)}
+     #       
+#
+ ##           if len(dataDir) > 0:
+#
+      #          dataDir["E1"] = E1
+ #               dataDir["E2"] = E2 
+  #              dataDir["Class"] = self.df.loc[idx,"Class"]   
+   #             del df
+    #            gc.collect()  
+     #           return dataDir
 
             
 
@@ -360,11 +392,6 @@ class Database(object):
 
         self.df[columnLabel] = self.df["E1;E2"].apply(lambda row, distM = distanceMatrix: self.matchRowsToMatrix(row,distM))
 
-    
-
-
-
-        
 
     def fillComplexMatrixFromData(self, X):
         ""
@@ -372,10 +399,6 @@ class Database(object):
             raise ValueError("X must be a pandas data frame with index and columns containg ID")
         
         return X.merge(self.df,how="left",left_index=True,right_on="E1;E2")
-
-
-        
-
 
 
 if __name__ == "__main__":

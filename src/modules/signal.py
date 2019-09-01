@@ -155,7 +155,7 @@ class Signal(object):
             spec = self._generateSpec(np.arange(self.Y.size) , self.Y, N = peakIdx.size)
             modelComposite, params = self._findParametersForModels(spec,peakIdx)
             fitOutput = modelComposite.fit(self.Y, params, x=spec['x'])
-            #self.plotSummary(peakIdx.size > self.peakIdx.size)
+            #self.plotSummary()
             return {"id":self.ID,"fitOutput":fitOutput,'spec':spec,'peakIdx':peakIdx}
         except:
            with open("{}.txt".format(self.ID),"w") as f:
@@ -190,13 +190,13 @@ class Signal(object):
         return [self.p_pears(self.Y,Y) for Y in Ys]
        
     def apex(self,otherSignalPeaks):
-        ""
+        "Calculates Apex Distance"
         ownPeaks = self._collectPeakResults()
         apexDist = []     
         for otherPeaks in otherSignalPeaks:
 
             apexDist.append([self._apex(p1,p2) for p1 in ownPeaks for p2 in otherPeaks])
-
+        minArgs = [np.argmin(x) for x in apexDist]
         return [np.min(x) for x in apexDist]
 
     def calculateMetrices(self,ID):
@@ -243,23 +243,9 @@ class Signal(object):
             #collectedDf.to_csv(pathToFile, index=False)
 
 
-
-
-
-     #   for Signal in otherSignals:
-
-      #      e2.append(ID)
-
-          #  for metric in metrices:
-#
-            #    if metric in ['pearson']:
-
-                #    r, p = getattr(self,"metric")(otherPeaks)
-
-
                 
     def calculateApexDistance(self,otherSignals,n):
-        ""
+        "Calculates Apex distance compared to all other Signals."
         ownPeaks = self._collectPeakResults()
         df = pd.DataFrame()
         
@@ -312,30 +298,6 @@ class Signal(object):
         return 1 - self.fitOutput.residual.var() / np.var(self.spec['y'])
 
 
-       # fig, gridspec = output.plot(data_kws={'markersize': 1})
-
-       # self.print_best_values(spec,output)
-       # plt.show()
-       # fig, ax = plt.subplots()
-       # ax.plot(spec['x'],self.Y , color="black" , linestyle="--")
-       
-       # components = output.eval_components(x=spec['x'])
-      
-      
-       # for i, model in enumerate(spec['model']):
-       #     ax.plot(spec['x'], components[f'm{i}_'])
-      #  plt.show()
-
-
-
-
-        #composite_model, params = self._generateModels(spec)
-        #peak_indicies, params = self.update_spec_from_peaks(composite_model,spec,[0,1,2],peak_widths=[1,4])
-        #output = model.fit(spec['y'], params, x=spec['x'])
-        #fig, gridspec = output.plot(data_kws={'markersize': 1})
-        #plt.show()
-
-
     def plotSummary(self, peakNumReduced=False, figure = None):
         ""
 
@@ -374,6 +336,8 @@ class Signal(object):
 
     def __getstate__(self):
         state = self.__dict__.copy()
+        if not hasattr(self,"modelledPeaks"):
+            self._collectPeakResults()
         if "fitOutput" in state:
             del state["fitOutput"]
         return state

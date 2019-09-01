@@ -31,34 +31,48 @@ class Classifier(object):
                                             n_jobs=n_jobs)
 
     def _scaleFeatures(self,X):
-
-        return StandardScaler().fit_transform(X)
+        if not hasattr(self,"Scaler"):
+            self.Scaler = StandardScaler()
+        return self.Scaler.fit_transform(X)
         
 
     def _gridOptimization(self,X,Y):
 
-        gridSearch = GridSearchCV(self.classifier, scoring = "f1", param_grid = self.gridSerach, n_jobs = self.n_jobs, cv = 10, verbose=5)
+        gridSearch = GridSearchCV(self.classifier, 
+                                    scoring = "f1", 
+                                    param_grid = self.gridSerach, 
+                                    n_jobs = self.n_jobs, 
+                                    cv = 10, 
+                                    verbose=5)
+
         gridSearch.fit(X,Y)
 
-        print(gridSearch.best_estimator_.oob_score_)
+        self.bestClassifier = gridSearch.best_estimator_
 
         return gridSearch.best_params_
 
+
+    def predict(self,X,scale=True):
+        ""
+        if scale:
+            X = self._scaleFeatures(X)
+        print(self.bestClassifier.classes_)
+        print(self.bestClassifier.predict(X))
+        return self.bestClassifier.predict_proba(X)
 
     def fit(self, X, Y, optimizedParams=None):
         ""
         print("predictor training started")
         X = self._scaleFeatures(X)
 
-        xTrain, xTest, yTrain, yTest = train_test_split(X,Y,test_size=0.25)
-
+        xTrain, xTest, yTrain, yTest = train_test_split(X,Y,test_size=0.2)
 
         if self.gridSerach is not None:
             optimizedParams = self._gridOptimization(X,Y)
 
-        cv = StratifiedShuffleSplit(n_splits=10, test_size=0.2)
+        #cv = StratifiedShuffleSplit(n_splits=10, test_size=0.2)
 
-        #cv = StratifiedKFold(n_splits=3)
+        cv = StratifiedKFold(n_splits=3, shuffle=True)
         
         tprs = []
         aucs = []
@@ -71,9 +85,9 @@ class Classifier(object):
                 self.classifier.set_params(**optimizedParams)
             probas_ = self.classifier.fit(X[train], Y[train]).predict_proba(X[test])
             print(self.classifier.feature_importances_)
-            print(self.classifier.oob_score_)
-            print(self.classifier.classes_)
-            print(probas_)
+           # print(self.classifier.oob_score_)
+           # print(self.classifier.classes_)
+            #print(probas_)
             # Compute ROC curve and area the curve
             fpr, tpr, thresholds = roc_curve(Y[test], probas_[:, 1])
             tprs.append(interp(mean_fpr, fpr, tpr))

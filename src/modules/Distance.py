@@ -6,92 +6,89 @@ from scipy.spatial.distance import pdist
 from scipy.spatial.distance import squareform
 from scipy.stats import pearsonr
 from joblib import Parallel, delayed
-
+import os
 import gc 
 
 class DistanceCalculator(object):
 
-    def __init__(self):
+    def __init__(self, Y, E2, ID, otherSignalPeaks, ownPeaks, metrices = ["apex","euclidean","pearson","p_pearson","max_location"] ,pathToTmp = '', chunkName = ''):
         ""
+        self.Y = Y
+      #  self.Ys = Ys
+        self.ID = ID
+        self.E2s = E2
+        self.ownPeaks = ownPeaks
+        self.metrices = metrices
+        self.otherSignalPeaks = otherSignalPeaks
+        self.pathToTmp = pathToTmp
+
+        Ys = np.load(os.path.join(pathToTmp,"source.npy"))
+        boolIdx = np.isin(Ys[:,0],E2)
+        Ys = Ys[boolIdx]
+        self.Ys = Ys[:,[n for n in range(Ys.shape[1]) if n != 0]]
+
+    def _apex(self,p1,p2):
+        ""
+
+        return np.sqrt( (p1['mu'] - p2['mu']) ** 2  + (p1['sigma'] - p2['sigma']) ** 2 )
+
 
     def p_pears(self,u,v):
         "returns p value for pearson correlation"
-        _, p = pearsonr(u,v)
+        r, p = pearsonr(u,v)
 
-        return p
+        return r, 1-p
 
-    def p_pearson(self,X):
+    def euclideanDistance(self):
         ""
-        return squareform(pdist(X,self.p_pears))
+        return [np.linalg.norm(self.Y - Y) for Y in self.Ys]
 
-    def pearson(self,X, rowvar=True):
+    def pearson(self):
         ""
-        print("pearson is equal to 1-r therefore the range of r is [0,2]")
-        return 1-np.corrcoef(X,rowvar=rowvar)
+        return [self.p_pears(self.Y,Y) for Y in self.Ys]
+       
+    def apex(self,otherSignalPeaks):
+        "Calculates Apex Distance"
+        apexDist = []     
+        for otherPeaks in otherSignalPeaks:
 
-    def euclidean(self,X):
-        ""
-        print("Euclidean distance calculation")
-        return squareform(pdist(X,"euclidean"))
+            apexDist.append([self._apex(p1,p2) for p1 in self.ownPeaks for p2 in otherPeaks])
+        minArgs = [np.argmin(x) for x in apexDist]
+        return [np.min(x) for x in apexDist]
+
+    def calculateMetrices(self):
 
 
-    def apex(self,X):
+
+
+
+        collectedDf = pd.DataFrame()
+
+        collectedDf["E1"] = [self.ID] * len(self.E2s)
+        collectedDf["E2"] = self.E2s
         
-        otherSignals = [(Signal.ID,Signal._collectPeakResults()) for Signal in X]
-        distM = []#Parallel(n_jobs=n_jobs)(delayed(Signal.calculateApexDistance)(otherSignals) for Signal in X)
-        signalIds = [x[0] for x in otherSignals]
-        df = pd.DataFrame(columns=["E1;E2","metric"])
-        for n,Signal in enumerate(X):
-            
-            df = df.append(Signal.calculateApexDistance(otherSignals,n), ignore_index = True)
-            gc.collect()
+        for metric in self.metrices:
 
+            if metric == "pearson":
+                collectedDf["pearson"], collectedDf["p_pearson"] = zip(*self.pearson())
 
+            elif metric == "euclidean":
 
-        return df
-
-        
-    def apexScore(self, entry1, entry2):
-        ""
-        mu1,sigma1 = entry1
-        mu2, sigma2 = entry2
-        return np.sqrt((mu1-mu2)**2 + (sigma1-sigma2)**2)
-
-    def _transformToLong(self,ids,distM,distance):
-        ""
-        df = pd.DataFrame(columns = ["idx","distance"])
-        distMatrix = pd.DataFrame(distM,index=ids,columns=ids)
-        for idPair in itertools.combinations(ids, 2):
-            e1,e2 = idPair
-            df = df.append({"idx":"{};{}".format(e1,e2),
-                       "distance":distMatrix.loc[e1,e2]},
-                ignore_index=True)
-
-        return df
-
-
-    def getDistanceMatrix(self,X, distance="pearson", longFormOutput=False):
-        ""
-        if hasattr(self,distance) and distance != "apex":
-            distM = getattr(self, distance)(X)
-            if longFormOutput:
-                return self._transformToLong(X.index,distM,distance)
-            else:
-                return distM
-
-        elif distance == "apex":
-
-            if not isinstance(X,list):
-                raise ValueError("X must be list for apex distance")
-            print("Apex calculation started ..")
-            distM = self.apex(X)
-
-            return distM
-
-        
+                collectedDf["euclidean"] = self.euclideanDistance()
+                    
+            elif metric == "apex":
                 
-        raise ValueError("Distance unknown.")
 
+                collectedDf["apex"] = self.apex(self.otherSignalPeaks)
+
+            elif metric == "max_location":
+
+                maxOwnY = np.argmax(self.Y)
+                collectedDf["max_location"] = [np.argmax(Y)-maxOwnY for Y in self.Ys]
+
+        gc.collect()
+        return collectedDf.values
+            #collectedDf.to_csv(pathToFile, index=False)
 
 
 if __name__ == "__main__":

@@ -6,8 +6,15 @@ import itertools
 import random 
 import gc 
 from joblib import Parallel, delayed
-
+import itertools
 import time
+import pickle
+
+def chunks(l, n):
+    """Yield successive n-sized chunks from l."""
+    for i in range(0, len(l), n):
+        yield l[i:i + n]
+
 
 class Database(object):
 
@@ -15,6 +22,7 @@ class Database(object):
     def __init__(self):
         ""
         self.dbs = dict() 
+        self.params = {"n_jobs":4}
         self._load()
 
     def _load(self):
@@ -83,7 +91,7 @@ class Database(object):
 
             decoyData.append({"ComplexID":"F({})".format(n),"E1":e1,"E2":e2,"complexName":"Fake({})".format(n),"Class":0})
 
-            if n % 30 == 0:
+            if n % int(nData*0.15) == 0:
                 print(round(n/nData*100,2), "% done")
         
         df = pd.concat([self.df,pd.DataFrame(decoyData)],ignore_index=True)
@@ -93,7 +101,7 @@ class Database(object):
         print("\nCreating decoy is done..")
 
 
-    def filterDBByEntryList(self,entryList):
+    def filterDBByEntryList(self,entryList, maxSize = 5000):
 
 
         dbEntries = self.df[['E1', 'E2']].values
@@ -101,6 +109,8 @@ class Database(object):
 
         boolIdx = [e1 in entryList and e2 in entryList for e1,e2 in dbEntries]
         self.df = self.df.loc[boolIdx,:]
+        if self.df.index.size > maxSize:
+            self.df = self.df.sample(n=maxSize)
         print("filtered database, new size: ",str(self.df.index.size))
 
 
@@ -265,10 +275,12 @@ class Database(object):
             return metricDf.loc[metricDf["E2E1"] == search,mCols]
 
 
-    def matchMetrices(self,pathToTmp):#metricDf):
+    def matchMetrices(self,pathToTmp,entriesInChunks):#metricDf):
         ""
+        print("matching metrices to DB and decoy .. ")
         distanceFile = os.path.join(pathToTmp,"DBdistances.txt")
         if os.path.exists(distanceFile):
+
             print("File found and loaded")
             self.df = pd.read_csv(distanceFile, sep="\t", index_col=False)
 
@@ -279,34 +291,61 @@ class Database(object):
             t1 = time.time()
             newDBData = []
 
-            newDBData = Parallel(n_jobs=4,verbose=10,prefer="threads")(delayed(self.findInteraction)(self.df.loc[idx,"E1"],
-                        self.df.loc[idx,"E2"],
-                        self.df.loc[idx,"Class"],   
-                        txtFiles,pathToTmp,metricColumns) for idx in self.df.index)
+            chunks = self._createChunks(pathToTmp,entriesInChunks)
+            newDBData = Parallel(n_jobs=self.params["n_jobs"],verbose=15, backend="multiprocessing")(delayed(self._chunkInteraction)(c) for c in chunks)
+            newDBData = list(itertools.chain(*newDBData))
+    
+            print("\n\nTime to macht interactions {} secs",time.time()-t1)
 
-        #    for idx in self.df.index:
-         #       dataDir = self.findInteraction(idx,txtFiles,pathToTmp,metricColumns)
-          #      if dataDir is not None:
-           #         newDBData.append(dataDir)
-#
-   #             if idx % 100 == 0:
- #                   print(idx, " matches of metrices to DB done.")
-  #              
-
-            print("Time to macht Interactions for: ",time.time()-t1)
-
-
+            
             self.df = pd.DataFrame([x for x in newDBData if x is not None])
             print(self.df)
             self.df.to_csv(os.path.join(pathToTmp,"DBdistances.txt"),sep="\t", index=False)
 
 
+    def _createChunks(self,pathToTmp,entriesInChunks):
+        ""
+        print("prepare chunks ...")
+        c = []
+        folderPath = os.path.join(pathToTmp,"dbMatches")
+        os.mkdir(folderPath)
+        #n = int(self.df.index.size/self.params["n_jobs"])
+        for n,chunk in enumerate(chunks(self.df.index,250)):
+            chunkItems = []
+            print("chunk : {}".format(n))
+            for idx in chunk:
+                E1 = self.df.loc[idx,"E1"]
+                E2 = self.df.loc[idx,"E2"] 
+                className = self.df.loc[idx,"Class"]
+                requiredFiles = ["{}.npy".format(k) for k,v in  entriesInChunks.items() if E1 in v and E2 in v]
+                metricColumns = ["apex","euclidean","pearson","p_pearson","max_location"]
+                chunkItems.append({"E1":E1,"E2":E2,"className":className,"requiredFiles":requiredFiles,"metricColumns":metricColumns,"pathToTmp":pathToTmp})
+            
+            with open(os.path.join(folderPath, str(n)+".pkl"),"wb") as f:
+                pickle.dump(chunkItems,f)
+            
+            c.append(os.path.join(folderPath, str(n)+".pkl"))
+           
+        del chunkItems
+        gc.collect()
+        
+        return c
 
 
-    def findInteraction(self,E1,E2,className,txtFiles,pathToTmp,metricColumns):
-            for f in txtFiles:
 
-                data = np.load(os.path.join(pathToTmp,f),allow_pickle=True).reshape(-1,7)
+    def _chunkInteraction(self,pathToChunk):
+        with open(pathToChunk,"rb") as f:
+            chunkItems = pickle.load(f)
+        return [self.findInteraction(**c) for c in chunkItems]
+
+
+
+    def findInteraction(self,E1,E2,className,requiredFiles,pathToTmp,metricColumns):
+            
+            
+            for f in requiredFiles:
+
+                data = np.load(os.path.join(pathToTmp,f),allow_pickle=True)
 
                 boolIdx = np.logical_and(data[:,0] == E1, data[:,1] == E2)
             

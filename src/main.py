@@ -14,7 +14,9 @@ import gc
 import string
 import random
 import time
+import pickle
 from multiprocessing import Pool
+from joblib import wrap_non_picklable_objects
 
 filePath = os.path.dirname(os.path.realpath(__file__)) 
 pathToTmp = os.path.join(filePath,"tmp")
@@ -26,6 +28,38 @@ RF_GRID_SEARCH = {#'bootstrap': [True, False],
  'min_samples_split': [2, 3],
  'n_estimators': [300]}
 
+#class SignalHelper(object):
+
+ #   ""
+  #  def __init__(self,**kwargs):
+   #     
+  #      data = np.array([])
+    #    for signal in kwargs["signals"]:
+     #       data = np.append(data,getattr(signal,kwargs["funcName"])(kwargs["id"]))
+#
+ #       self.saveChunks(str(kwargs["id"]),data,kwargs["pathToTmp"])
+    
+   # def saveChunks(self,fileName,data,pathToTmp):
+
+    #    data = data.reshape(-1,7)
+     #   entriesInChunks[fileName] = np.unique(data[:,[0,1]])
+#
+ #       np.save(os.path.join(pathToTmp,fileName),data)
+
+
+
+entriesInChunks = dict() 
+
+
+def _calculateDistanceP(pathToFile):
+    
+    with open(pathToFile,"rb") as f:
+        chunkItems = pickle.load(f)
+    exampleItem = chunkItems[0]
+    data = np.concatenate([DistanceCalculator(**c).calculateMetrices() for c in chunkItems],axis=0)
+    np.save(os.path.join(exampleItem["pathToTmp"],exampleItem["chunkName"]),data)        
+    return (exampleItem["chunkName"],np.unique(data[:,[0,1]]))
+        
 
 def chunks(l, n):
     """Yield successive n-sized chunks from l."""
@@ -33,27 +67,12 @@ def chunks(l, n):
         yield l[i:i + n]
 
 
-class SignalHelper(object):
-
-    ""
-    def __init__(self,id,signals,funcName,pathToTmp):
-
-        data = np.array([])
-        for signal in signals:
-            data = np.append(data,getattr(signal,funcName)(id))
-
-        self.saveChunks(str(id),data,pathToTmp)
-    
-    def saveChunks(self,fileName,data,pathToTmp):
-
-        np.save(os.path.join(pathToTmp,fileName),data)
-
 
 class ComplexFinder(object):
 
     def __init__(self,
                 indexIsID = True,
-                maxPeaksPerSignal = 15,
+                maxPeaksPerSignal = 8,
                 n_jobs = 4,
                 analysisName = None,
                 idColumn = "Uniprot ID",
@@ -88,9 +107,12 @@ class ComplexFinder(object):
             self.X = X
 
             if not self.params["indexIsID"]:
+                
+                np.save(os.path.join(self.params["pathToTmp"],"source"),self.X.values)
 
                 self.X = self.X.set_index(self.params["idColumn"])
                 self.X = self.X.astype(np.float)
+                
 
         else:
 
@@ -109,6 +131,7 @@ class ComplexFinder(object):
                 for k,v in fitModel.items():
                     if k != 'id':
                         setattr(self.Signals[modelID],k,v)
+                
             
 
     def _findPeaks(self, n_jobs=3):
@@ -134,6 +157,7 @@ class ComplexFinder(object):
             print("\n\nStarting Signal modelling .. (n_jobs = {})".format(n_jobs))
             fittedModels = Parallel(n_jobs=n_jobs, verbose=1)(delayed(Signal.fitModel)() for Signal in self.Signals.values())
             self._addModelToSignals(fittedModels)
+            
             print("Peak fitting done time : {} secs".format(round((time.time()-t1))))
         
         dump(self.Signals,pathToSignal)
@@ -149,16 +173,65 @@ class ComplexFinder(object):
         for n,Signal in enumerate(self.Signals.values()):
             setattr(Signal,"otherSignals", X[n:])
 
-        nSignals = len(self.Signals)
+        chunks = self._createSignalChunks()
 
-        Parallel(n_jobs=self.params["n_jobs"], prefer="threads",verbose=5)(delayed(SignalHelper)(id=n,
-                                    signals=chunk,
-                                    funcName="calculateMetrices",
-                                    pathToTmp=self.params["pathToTmp"]) for n,chunk in enumerate(chunks(list(self.Signals.values()),25)))
+        chunkItems = Parallel(n_jobs=self.params["n_jobs"], verbose=10)(delayed(_calculateDistanceP)(c) for c in chunks)
+        
+
+        for k,v in chunkItems:
+            entriesInChunks[k] = v 
 
         print("Distance computing: {} secs\n".format(round(time.time()-t1)))
 
-        
+    def _createSignalChunks(self):
+
+        nSignals = len(self.Signals)
+        signals = list(self.Signals.values())
+        chunkSize = 30#int(float(nSignals*0.10))
+
+        c = []
+
+        for n,chunk in enumerate(chunks(signals,chunkSize)):
+            chunkItems = []
+            for signal in chunk:
+                chunkItems.append({"ID":str(signal.ID),
+                                    "chunkName":str(n),
+                                    "Y":np.array(signal.Y),
+                                    "ownPeaks" : signal._collectPeakResults(),
+                                    "otherSignalPeaks" : [s._collectPeakResults() for s in signal.otherSignals],
+                                    "E2":[str(s.ID) for s in signal.otherSignals],
+                                    #"Ys":[np.array(s.Y) for s in signal.otherSignals],
+                                    "pathToTmp":self.params["pathToTmp"]})
+
+            with open(os.path.join(self.params["pathToTmp"], str(n)+".pkl"),"wb") as f:
+                pickle.dump(chunkItems,f)
+            gc.collect()
+            c.append(os.path.join(self.params["pathToTmp"], str(n)+".pkl"))
+        del chunkItems
+        return c
+
+
+#class SignalHelper(object):
+
+ #   ""
+  #  def __init__(self,**kwargs):
+   #     
+  #      data = np.array([])
+    #    for signal in kwargs["signals"]:
+     #       data = np.append(data,getattr(signal,kwargs["funcName"])(kwargs["id"]))
+#
+ #       self.saveChunks(str(kwargs["id"]),data,kwargs["pathToTmp"])
+    
+   # def saveChunks(self,fileName,data,pathToTmp):
+
+    #    data = data.reshape(-1,7)
+     #   entriesInChunks[fileName] = np.unique(data[:,[0,1]])
+#
+ #       np.save(os.path.join(pathToTmp,fileName),data)
+
+
+
+
     def _loadReferenceDB(self):
         ""
 
@@ -170,7 +243,7 @@ class ComplexFinder(object):
 
 
     def _addMetricesToDB(self):
-        self.DB.matchMetrices(self.params["pathToTmp"])
+        self.DB.matchMetrices(self.params["pathToTmp"],entriesInChunks)
 
 
     def _trainPredictor(self):
@@ -189,7 +262,7 @@ class ComplexFinder(object):
 
     def _loadPairs(self):
 
-        chunks = [f for f in os.listdir(self.params["pathToTmp"]) if f.endswith(".npy")]
+        chunks = [f for f in os.listdir(self.params["pathToTmp"]) if f.endswith(".npy") and f != "source.npy"]
         pathToPredict = os.path.join(self.params["pathToTmp"],"predictions")
         if not os.path.exists(pathToPredict):
             os.mkdir(pathToPredict)
@@ -280,13 +353,9 @@ class ComplexFinder(object):
 
 
 if __name__ == "__main__":
-    X = pd.DataFrame(np.array([
-        [0,0.3,0.5,0.8,0.9,0.5,0.3,0.15,0,0,0,0.3,0.7,0.60,0.5,0.3,0.9,0.3,0.2,0.05,0,0,0,0.3,0.5,0.8,0.9,0.5,0.3,0.15,0,0,0,0.3,0.7,0.8,0.9,0.3,0.2,0.05,0],
-        [0,0.3,0.5,0.8,0.9,0.5,0.3,0.15,0,0,0,0.3,0.7,0.60,0.5,0.3,0.9,0.3,0.2,0.05,0,0,0,0.3,0.5,0.8,0.9,0.5,0.3,0.15,0,0,0,0.3,0.7,0.8,0.9,0.3,0.2,0.05,0]
-    ]))
 
-    X = pd.read_csv("../example-data/HeuselEtAlAebersoldLab.txt", 
-                    sep="\t")#, nrows=200)
+    X = pd.read_csv("C:/Users/age/Documents/GitHub/ComplexFinder/example-data/HeuselEtAlAebersoldLab.txt", 
+                    sep="\t")
 
  #X = X.set_index("Uniprot ID")
   #  X

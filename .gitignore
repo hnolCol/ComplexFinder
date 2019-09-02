@@ -8,11 +8,10 @@ __pycache__/
 
 /src/tmp
 
+src/OUTPUT.txt
 
 # C extensions
 *.so
-
-
 
 # Distribution / packaging
 .Python
@@ -129,3 +128,4 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+

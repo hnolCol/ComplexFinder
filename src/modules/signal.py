@@ -156,6 +156,7 @@ class Signal(object):
             modelComposite, params = self._findParametersForModels(spec,peakIdx)
             fitOutput = modelComposite.fit(self.Y, params, x=spec['x'])
             #self.plotSummary()
+            
             return {"id":self.ID,"fitOutput":fitOutput,'spec':spec,'peakIdx':peakIdx}
         except:
            with open("{}.txt".format(self.ID),"w") as f:
@@ -268,7 +269,12 @@ class Signal(object):
         return df
 
 
+    def saveResults(self):
 
+        self.Rsquared = self._calculateSquredR()
+        self._collectPeakResults()
+        
+        
 
     def _collectPeakResults(self):
         "Put results of peaks in a list"
@@ -293,7 +299,7 @@ class Signal(object):
 
         return self.modelledPeaks
 
-    def _calculateSquredR(self):
+    def _calculateSquredR(self,model):
         ""
         return 1 - self.fitOutput.residual.var() / np.var(self.spec['y'])
 

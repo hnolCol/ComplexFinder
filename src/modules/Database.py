@@ -67,7 +67,7 @@ class Database(object):
 
         else:
 
-            df = pd.DataFrame( columns=["InteractionID", "ComplexName", "Entry1","Entry2","Class"])
+            df = pd.DataFrame( columns=["InteractionID", "ComplexName", "E1","E2","E1E2","Class"])
             filteredDB = self._filterDb(dbID,filterDb,complexIDsColumn,complexNameColumn,complexNameFilterString)
             self.df = self._findPositiveInteractions(filteredDB,df,dbID,complexNameColumn)
             print("{} interactions found using the given filter criteria.".format(self.df.index.size))
@@ -86,10 +86,10 @@ class Database(object):
         for n,(x1,x2) in enumerate(randCombinations):
             e1Idx = np.random.randint(0,complexMembers.loc[complexIdx[x1]]) 
             e2Idx = np.random.randint(0,complexMembers.loc[complexIdx[x2]]) 
-            e1 =  self.df[self.df["ComplexID"] == complexIdx[x1]].iloc[e1Idx]["E1"]
-            e2 =  self.df[self.df["ComplexID"] == complexIdx[x2]].iloc[e2Idx]["E2"]
-
-            decoyData.append({"ComplexID":"F({})".format(n),"E1":e1,"E2":e2,"complexName":"Fake({})".format(n),"Class":0})
+            if x1 != x2:
+                e1 =  self.df[self.df["ComplexID"] == complexIdx[x1]].iloc[e1Idx]["E1"]
+                e2 =  self.df[self.df["ComplexID"] == complexIdx[x2]].iloc[e2Idx]["E2"]
+                decoyData.append({"ComplexID":"F({})".format(n),"E1":e1,"E2":e2,"E1E2":''.join(sorted([e1,e2])),"complexName":"Fake({})".format(n),"Class":0})
 
             if n % int(nData*0.15) == 0:
                 print(round(n/nData*100,2), "% done")
@@ -101,7 +101,7 @@ class Database(object):
         print("\nCreating decoy is done..")
 
 
-    def filterDBByEntryList(self,entryList, maxSize = 5000):
+    def filterDBByEntryList(self,entryList, maxSize = 10000):
 
 
         dbEntries = self.df[['E1', 'E2']].values
@@ -138,30 +138,6 @@ class Database(object):
                         sep="\t",
                         index=False)
 
-    def _generateFalseInterctions(self,df,filteredDB,matchSize):
-
-        if isinstance(matchSize,bool) and matchSize:
-
-            numOfFalseComplex = df.index.size
-        elif isinstance(matchSize,int):
-            numOfFalseComplex = matchSize
-        else:
-            raise ValueError("matchSize must be boolean or int")
-
-        nInteractions = df.index.size
-        
-        print("Generating {} false protein protein interactions".format(nInteractions))
-        
-        maxInt = filteredDB.size-1
-
-        allInteractors = pd.unique(df[['E1', 'E2']].values.ravel('K'))
-       # randomParis =  Parallel(n_jobs=4)(delayed(self._generateRandomIndexPairs)(max=maxInt) for n in range(numOfFalseComplex))
-
-
-        falsePairs = Parallel(n_jobs=4)(delayed(self.randomPairs)(n, max=maxInt, allInteractors = allInteractors, nInts = allInteractors.size-1) for n in range(numOfFalseComplex))
-
-        return pd.concat([df,pd.DataFrame(falsePairs)])
-
 
     def _getRandomEntries(self,allInteractors,idxPair):
         idx1,idx2 = idxPair
@@ -196,7 +172,7 @@ class Database(object):
 
         collectedResult = []
         for interaction in self._getPariwiseInteractions(interactors.split(";")):
-               collectedResult.append({"ComplexID":i,"E1":interaction[0],"E2":interaction[1],"complexName":complexName,"Class":predictClass})
+               collectedResult.append({"ComplexID":i,"E1":interaction[0],"E2":interaction[1],"E1E2":''.join(sorted(interaction)),"complexName":complexName,"Class":predictClass})
         return collectedResult
 
 
@@ -275,7 +251,7 @@ class Database(object):
             return metricDf.loc[metricDf["E2E1"] == search,mCols]
 
 
-    def matchMetrices(self,pathToTmp,entriesInChunks):#metricDf):
+    def matchMetrices(self,pathToTmp,entriesInChunks,metricColumns):#metricDf):
         ""
         print("matching metrices to DB and decoy .. ")
         distanceFile = os.path.join(pathToTmp,"DBdistances.txt")
@@ -287,7 +263,7 @@ class Database(object):
         else:
 
             txtFiles = [f for f in os.listdir(pathToTmp) if f.endswith(".npy")]
-            metricColumns = ["apex","euclidean","pearson","p_pearson","max_location"]
+            
             t1 = time.time()
             newDBData = []
 
@@ -311,16 +287,8 @@ class Database(object):
         os.mkdir(folderPath)
         #n = int(self.df.index.size/self.params["n_jobs"])
         for n,chunk in enumerate(chunks(self.df.index,250)):
-            chunkItems = []
             print("chunk : {}".format(n))
-            for idx in chunk:
-                E1 = self.df.loc[idx,"E1"]
-                E2 = self.df.loc[idx,"E2"] 
-                className = self.df.loc[idx,"Class"]
-                requiredFiles = ["{}.npy".format(k) for k,v in  entriesInChunks.items() if E1 in v and E2 in v]
-                metricColumns = ["apex","euclidean","pearson","p_pearson","max_location"]
-                chunkItems.append({"E1":E1,"E2":E2,"className":className,"requiredFiles":requiredFiles,"metricColumns":metricColumns,"pathToTmp":pathToTmp})
-            
+            chunkItems = [self._createSignleChunk(idx,entriesInChunks,pathToTmp) for idx in chunk]
             with open(os.path.join(folderPath, str(n)+".pkl"),"wb") as f:
                 pickle.dump(chunkItems,f)
             
@@ -331,7 +299,14 @@ class Database(object):
         
         return c
 
-
+    def _createSignleChunk(self,idx, entriesInChunks,pathToTmp):
+        E1 = self.df.loc[idx,"E1"]
+        E2 = self.df.loc[idx,"E2"] 
+        E1E2 = ''.join(sorted([E1,E2]))
+        className = self.df.loc[idx,"Class"]
+        requiredFiles = ["{}.npy".format(k) for k,v in  entriesInChunks.items() if E1E2 in v]
+        metricColumns = ["apex","euclidean","pearson","p_pearson"]
+        return {"E1":E1,"E2":E2,"E1E2":E1E2,"className":className,"requiredFiles":requiredFiles,"metricColumns":metricColumns,"pathToTmp":pathToTmp}
 
     def _chunkInteraction(self,pathToChunk):
         with open(pathToChunk,"rb") as f:
@@ -340,7 +315,7 @@ class Database(object):
 
 
 
-    def findInteraction(self,E1,E2,className,requiredFiles,pathToTmp,metricColumns):
+    def findInteraction(self,E1,E2,E1E2,className,requiredFiles,pathToTmp,metricColumns):
             
             
             for f in requiredFiles:
@@ -364,6 +339,7 @@ class Database(object):
 
                 dataDir["E1"] = E1
                 dataDir["E2"] = E2 
+                dataDir["E1E2"] = E1E2
                 dataDir["Class"] = className  
                 del data
                 gc.collect()  

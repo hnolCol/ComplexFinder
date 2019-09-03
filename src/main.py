@@ -22,30 +22,11 @@ filePath = os.path.dirname(os.path.realpath(__file__))
 pathToTmp = os.path.join(filePath,"tmp")
 
 RF_GRID_SEARCH = {#'bootstrap': [True, False],
- 'max_depth': [70,80, None],
+ 'max_depth': [70,80,120, None],
  'max_features': ['sqrt','auto'],
- 'min_samples_leaf': [2, 3],
- 'min_samples_split': [2, 3],
+ 'min_samples_leaf': [2, 3,4],
+ 'min_samples_split': [2, 3,5],
  'n_estimators': [300]}
-
-#class SignalHelper(object):
-
- #   ""
-  #  def __init__(self,**kwargs):
-   #     
-  #      data = np.array([])
-    #    for signal in kwargs["signals"]:
-     #       data = np.append(data,getattr(signal,kwargs["funcName"])(kwargs["id"]))
-#
- #       self.saveChunks(str(kwargs["id"]),data,kwargs["pathToTmp"])
-    
-   # def saveChunks(self,fileName,data,pathToTmp):
-
-    #    data = data.reshape(-1,7)
-     #   entriesInChunks[fileName] = np.unique(data[:,[0,1]])
-#
- #       np.save(os.path.join(pathToTmp,fileName),data)
-
 
 
 entriesInChunks = dict() 
@@ -58,7 +39,7 @@ def _calculateDistanceP(pathToFile):
     exampleItem = chunkItems[0]
     data = np.concatenate([DistanceCalculator(**c).calculateMetrices() for c in chunkItems],axis=0)
     np.save(os.path.join(exampleItem["pathToTmp"],exampleItem["chunkName"]),data)        
-    return (exampleItem["chunkName"],np.unique(data[:,[0,1]]))
+    return (exampleItem["chunkName"],[''.join(sorted(row.tolist())) for row in data[:,[0,1]]])
         
 
 def chunks(l, n):
@@ -72,15 +53,15 @@ class ComplexFinder(object):
 
     def __init__(self,
                 indexIsID = True,
-                maxPeaksPerSignal = 8,
+                maxPeaksPerSignal = 5,
                 n_jobs = 4,
                 analysisName = None,
                 idColumn = "Uniprot ID",
                 databaseName="CORUM",
-                peakModel = "Lorentzian",
+                peakModel = "LorentzianModel",
                 imputeNaN = True,
                 interactionProbabCutoff = 0.85,
-                metrices = ["apex","euclidean","pearson","p_pearson","max_location"],
+                metrices = ["apex","euclidean","pearson","p_pearson"],
                 classiferGridSearch = RF_GRID_SEARCH):
         ""
 
@@ -109,10 +90,8 @@ class ComplexFinder(object):
             if not self.params["indexIsID"]:
                 
                 np.save(os.path.join(self.params["pathToTmp"],"source"),self.X.values)
-
                 self.X = self.X.set_index(self.params["idColumn"])
                 self.X = self.X.astype(np.float)
-                
 
         else:
 
@@ -148,6 +127,7 @@ class ComplexFinder(object):
                 self.Signals[entryID] = Signal(signal.values,
                                                 ID=entryID, 
                                                 peakModel=peakModel, 
+                                                savePlots = False,
                                                 maxPeaks=self.params["maxPeaksPerSignal"],
                                                 metrices=self.params["metrices"],
                                                 pathToTmp = self.params["pathToTmp"]) 
@@ -243,7 +223,7 @@ class ComplexFinder(object):
 
 
     def _addMetricesToDB(self):
-        self.DB.matchMetrices(self.params["pathToTmp"],entriesInChunks)
+        self.DB.matchMetrices(self.params["pathToTmp"],entriesInChunks,self.params["metrices"])
 
 
     def _trainPredictor(self):
@@ -253,6 +233,7 @@ class ComplexFinder(object):
         data = self.DB.df[totalColumns].dropna(subset=metricColumns)
         self.Y = data['Class'].values
         X = data.loc[:,metricColumns].values
+        print(X)
 
         self.classifier = Classifier(
             n_jobs=self.params['n_jobs'], 
@@ -269,7 +250,7 @@ class ComplexFinder(object):
         print("\nPrediction started...")
         for chunk in chunks:
 
-            X = np.load(os.path.join(self.params["pathToTmp"],chunk),allow_pickle=True).reshape(-1,7)
+            X = np.load(os.path.join(self.params["pathToTmp"],chunk),allow_pickle=True).reshape(-1,3+len(self.params["metrices"]))
             
             yield (X, os.path.join(pathToPredict,chunk))
             
@@ -282,7 +263,8 @@ class ComplexFinder(object):
             boolSelfIntIdx = X[:,0] == X[:,1] 
 
             X = X[boolSelfIntIdx == False]
-            classProba = self.classifier.predict(X[:,[n+2 for n in range(5)]])
+            #first two rows E1 and E2, remove before predict
+            classProba = self.classifier.predict(X[:,[n+3 for n in range(len(self.params["metrices"]))]])
             
             predX = np.append(X,classProba,axis=1)
             print(predX)
@@ -292,13 +274,19 @@ class ComplexFinder(object):
             else:
                 predInteractions = np.append(predInteractions,predX[boolPredIdx], axis=0)
 
-            print(predInteractions)
+
+
+
+            print(predInteractions.size)
             np.save(
                 file = pathToChunk,
                 arr = predX)
 
 
         self.predInteractions = predInteractions
+        boolDbMatch = np.isin(self.predInteractions[:,2],self.DB.df["E1E2"])
+        
+        self.predInteractions = np.append(self.predInteractions,boolDbMatch,axis=1)
         print(self.predInteractions)
         print(self.predInteractions.size)
 
@@ -355,7 +343,7 @@ class ComplexFinder(object):
 if __name__ == "__main__":
 
     X = pd.read_csv("C:/Users/age/Documents/GitHub/ComplexFinder/example-data/HeuselEtAlAebersoldLab.txt", 
-                    sep="\t")
+                    sep="\t", nrows=150)
 
  #X = X.set_index("Uniprot ID")
   #  X

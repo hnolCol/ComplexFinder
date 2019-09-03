@@ -12,15 +12,17 @@ import matplotlib.pyplot as plt
 from joblib import Parallel, delayed
 from scipy.stats import pearsonr
 import time
+
+
 class Signal(object):
 
-    def __init__(self, Y, ID= "", peakModel = "", nonNan = 4, maxPeaks = 8, savePlots = True , saveDir = '', metrices = [], pathToTmp = ""):
+    def __init__(self, Y, ID= "", peakModel = 'LorentzianModel', nonNan = 4, maxPeaks = 12, savePlots = True , metrices = [], pathToTmp = ""):
 
         self.Y = Y 
         self.ID = ID
+        self.peakModel = peakModel
         self.maxPeaks = maxPeaks
         self.savePlots = savePlots 
-        self.saveDir = saveDir
         self.metrices = metrices
         self.pathToTmp = pathToTmp
 
@@ -72,7 +74,7 @@ class Signal(object):
         spec = {
             'x': x,
             'y': y,
-            'model': [{'type': 'LorentzianModel'}] * N
+            'model': [{'type': self.peakModel}] * N
             }
         return spec
 
@@ -98,8 +100,8 @@ class Signal(object):
 
         self._addParam(modelParams,
                 name=prefix+'sigma', 
-                value = 3,
-                min = 0.5, 
+                value = 2.5,
+                min = 0.3, 
                 max = 3)
 
         self._addParam(modelParams,
@@ -149,19 +151,15 @@ class Signal(object):
 
     def fitModel(self):
         ""
-        try:
-            peakIdx = self.findPeaks()
-            peakIdx = self._checkPeakIdx(peakIdx,self.maxPeaks)
-            spec = self._generateSpec(np.arange(self.Y.size) , self.Y, N = peakIdx.size)
-            modelComposite, params = self._findParametersForModels(spec,peakIdx)
-            fitOutput = modelComposite.fit(self.Y, params, x=spec['x'])
-            #self.plotSummary()
-            
-            return {"id":self.ID,"fitOutput":fitOutput,'spec':spec,'peakIdx':peakIdx}
-        except:
-           with open("{}.txt".format(self.ID),"w") as f:
-               f.write(str(spec))
-               f.write(str(self.Y))
+        peakIdx = self.findPeaks()
+        peakIdx = self._checkPeakIdx(peakIdx,self.maxPeaks)
+        spec = self._generateSpec(np.arange(self.Y.size) , self.Y, N = peakIdx.size)
+        modelComposite, params = self._findParametersForModels(spec,peakIdx)
+        fitOutput = modelComposite.fit(self.Y, params, x=spec['x'])
+        if self.savePlots:
+            self.plotSummary(fitOutput,spec,self._calculateSquredR(fitOutput,spec),peakIdx)
+        
+        return {"id":self.ID,"fitOutput":fitOutput,'spec':spec,'peakIdx':peakIdx}
 
     @property
     def modeledPeaks(self):
@@ -299,46 +297,46 @@ class Signal(object):
 
         return self.modelledPeaks
 
-    def _calculateSquredR(self,model):
+    def _calculateSquredR(self,model = None, spec= None):
         ""
-        return 1 - self.fitOutput.residual.var() / np.var(self.spec['y'])
+        if model is None:
+            model = self.fitOutput
+        if spec is None:
+            spec = self.spec
+        return 1 - model.residual.var() / np.var(spec['y'])
 
 
-    def plotSummary(self, peakNumReduced=False, figure = None):
+    def plotSummary(self, fitOutput, spec, R, peakIdx):
         ""
 
-        if figure is None and self.savePlots:
-            #
-            fileName = "{}_{}.pdf".format(self.ID,peakNumReduced)
-            if self.saveDir not in [None,"None",""]:
-                pathToSaveFigure = os.path.join(self.saveDir,fileName)
-                if not os.path.exists(pathToSaveFigure):
-                    pathToSaveFigure = fileName
-            else:
-                pathToSaveFigure = fileName
+        fileName = "{}.pdf".format(self.ID)
+        pathToPlotFolder = os.path.join(self.pathToTmp,"modelPlots")
+        if not os.path.exists(pathToPlotFolder):
+            os.mkdir(pathToPlotFolder)
+        pathToSaveFigure = os.path.join(pathToPlotFolder,fileName)
 
-            fig, ax = plt.subplots()
-            components = self.fitOutput.eval_components(x=self.spec['x'])
-            best_values = self.fitOutput.best_values
-            for i, model in enumerate(self.spec['model']):
-                prefix = f'm{i}_'
-                ax.plot(self.spec['x'], components[prefix], 
-                    linestyle="-", 
-                    linewidth=0.5, 
-                    label="s:{}, A:{}, c:{}".format(round(best_values[prefix+"sigma"],3),
-                                                            round(best_values[prefix+"amplitude"],3),
-                                                            round(best_values[prefix+"center"],2)
-                                                            
-                ))
+        fig, ax = plt.subplots()
+        components = fitOutput.eval_components(x=spec['x'])
+        best_values = fitOutput.best_values
+        for i, model in enumerate(spec['model']):
+            prefix = f'm{i}_'
+            ax.plot(spec['x'], components[prefix], 
+                linestyle="-", 
+                linewidth=0.5, 
+                label="s:{}, A:{}, c:{}".format(round(best_values[prefix+"sigma"],3),
+                                                        round(best_values[prefix+"amplitude"],3),
+                                                        round(best_values[prefix+"center"],2)
+                                                        
+            ))
 
-            ax.plot(self.spec['x'],self.Y , color="black" , linestyle="--", linewidth=0.5)
-            for peak in self.peakIdx:
-                ax.axvline(peak, color="darkgrey",linestyle="--",linewidth=0.1)
-            ax.set_title("R^2:{} peaksRemoved:{}".format(round(self._calculateSquredR(),3),
-                                                         peakNumReduced))
-            ax.legend(prop={'size': 5})
-            plt.savefig(pathToSaveFigure)
-            plt.close()
+        ax.plot(spec['x'],self.Y , color="black" , linestyle="--", linewidth=0.5)
+        for peak in peakIdx:
+            ax.axvline(peak, color="darkgrey",linestyle="--",linewidth=0.1)
+        ax.set_title("R^2:{}".format(round(R,3)))
+        #                                             
+        ax.legend(prop={'size': 5})
+        plt.savefig(pathToSaveFigure)
+        plt.close()
 
     def __getstate__(self):
         state = self.__dict__.copy()

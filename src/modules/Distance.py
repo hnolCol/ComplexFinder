@@ -11,7 +11,7 @@ import gc
 
 class DistanceCalculator(object):
 
-    def __init__(self, Y, E2, ID, otherSignalPeaks, ownPeaks, metrices = ["apex","euclidean","pearson","p_pearson","max_location"] ,pathToTmp = '', chunkName = ''):
+    def __init__(self, Y, E2, ID, otherSignalPeaks, ownPeaks, metrices = ["apex","euclidean","pearson","p_pearson"] ,pathToTmp = '', chunkName = ''):
         ""
         self.Y = Y
       #  self.Ys = Ys
@@ -37,7 +37,7 @@ class DistanceCalculator(object):
         "returns p value for pearson correlation"
         r, p = pearsonr(u,v)
 
-        return r, 1-p
+        return 1-r, p
 
     def euclideanDistance(self):
         ""
@@ -58,14 +58,12 @@ class DistanceCalculator(object):
 
     def calculateMetrices(self):
 
-
-
-
-
         collectedDf = pd.DataFrame()
 
         collectedDf["E1"] = [self.ID] * len(self.E2s)
         collectedDf["E2"] = self.E2s
+
+        collectedDf["E1E2"] = [''.join(sorted([self.ID,E2])) for E2 in self.E2s]
         
         for metric in self.metrices:
 
@@ -77,8 +75,7 @@ class DistanceCalculator(object):
                 collectedDf["euclidean"] = self.euclideanDistance()
                     
             elif metric == "apex":
-                
-
+            
                 collectedDf["apex"] = self.apex(self.otherSignalPeaks)
 
             elif metric == "max_location":

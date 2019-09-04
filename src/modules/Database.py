@@ -185,14 +185,6 @@ class Database(object):
         df = pd.DataFrame([item for sublist in pairWise for item in sublist])
         return df
 
-    def _appendToDF(self,df,ID,complexName,entry1,entry2,predictClass):
-                        
-        return df.append({"InteractionID": ID,
-                           "ComplexName" : complexName,
-                           "E1":entry1,
-                           "E2":entry2,
-                           "Class":predictClass}, ignore_index=True)
-
 
     def _getPariwiseInteractions(self,entryList):
         ""
@@ -268,7 +260,7 @@ class Database(object):
             newDBData = []
 
             chunks = self._createChunks(pathToTmp,entriesInChunks)
-            newDBData = Parallel(n_jobs=self.params["n_jobs"],verbose=15, backend="multiprocessing")(delayed(self._chunkInteraction)(c) for c in chunks)
+            newDBData = Parallel(n_jobs=self.params["n_jobs"],verbose=15)(delayed(self._chunkInteraction)(c) for c in chunks)
             newDBData = list(itertools.chain(*newDBData))
     
             print("\n\nTime to macht interactions {} secs",time.time()-t1)

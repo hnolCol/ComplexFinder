@@ -250,7 +250,7 @@ class ComplexFinder(object):
         print("\nPrediction started...")
         for chunk in chunks:
 
-            X = np.load(os.path.join(self.params["pathToTmp"],chunk),allow_pickle=True).reshape(-1,3+len(self.params["metrices"]))
+            X = np.load(os.path.join(self.params["pathToTmp"],chunk),allow_pickle=True)
             
             yield (X, os.path.join(pathToPredict,chunk))
             
@@ -260,10 +260,11 @@ class ComplexFinder(object):
         ""
         predInteractions = None
         for X,pathToChunk in self._loadPairs():
+            print(X)
             boolSelfIntIdx = X[:,0] == X[:,1] 
 
             X = X[boolSelfIntIdx == False]
-            #first two rows E1 and E2, remove before predict
+            #first two rows E1 E2, and E1E2, remove before predict
             classProba = self.classifier.predict(X[:,[n+3 for n in range(len(self.params["metrices"]))]])
             
             predX = np.append(X,classProba,axis=1)
@@ -273,8 +274,6 @@ class ComplexFinder(object):
                 predInteractions = predX[boolPredIdx]
             else:
                 predInteractions = np.append(predInteractions,predX[boolPredIdx], axis=0)
-
-
 
 
             print(predInteractions.size)
@@ -342,7 +341,7 @@ class ComplexFinder(object):
 
 if __name__ == "__main__":
 
-    X = pd.read_csv("C:/Users/age/Documents/GitHub/ComplexFinder/example-data/HeuselEtAlAebersoldLab.txt", 
+    X = pd.read_csv("../example-data/HeuselEtAlAebersoldLab.txt", 
                     sep="\t", nrows=150)
 
  #X = X.set_index("Uniprot ID")

@@ -22,7 +22,7 @@ class DistanceCalculator(object):
         self.otherSignalPeaks = otherSignalPeaks
         self.pathToTmp = pathToTmp
 
-        Ys = np.load(os.path.join(pathToTmp,"source.npy"))
+        Ys = np.load(os.path.join(pathToTmp,"source.npy"),allow_pickle=True)
         boolIdx = np.isin(Ys[:,0],E2)
         Ys = Ys[boolIdx]
         self.Ys = Ys[:,[n for n in range(Ys.shape[1]) if n != 0]]

@@ -9,7 +9,7 @@ from joblib import Parallel, delayed
 import itertools
 import time
 import pickle
-
+from collections import OrderedDict
 def chunks(l, n):
     """Yield successive n-sized chunks from l."""
     for i in range(0, len(l), n):
@@ -92,7 +92,7 @@ class Database(object):
                 decoyData.append({"ComplexID":"F({})".format(n),"E1":e1,"E2":e2,"E1E2":''.join(sorted([e1,e2])),"complexName":"Fake({})".format(n),"Class":0})
 
             if n % int(nData*0.15) == 0:
-                print(round(n/nData*100,2), "% done")
+                print(round(n/nData*100,2), "%")
         
         df = pd.concat([self.df,pd.DataFrame(decoyData)],ignore_index=True)
         df.index = np.arange(0,df.index.size)
@@ -259,11 +259,11 @@ class Database(object):
             t1 = time.time()
             newDBData = []
 
-            chunks = self._createChunks(pathToTmp,entriesInChunks)
+            chunks = self._createChunks(pathToTmp,entriesInChunks,metricColumns)
             newDBData = Parallel(n_jobs=self.params["n_jobs"],verbose=15)(delayed(self._chunkInteraction)(c) for c in chunks)
             newDBData = list(itertools.chain(*newDBData))
     
-            print("\n\nTime to macht interactions {} secs",time.time()-t1)
+            print("\n\nTime to macht {} interactions: {} secs".format(len(newDBData),time.time()-t1))
 
             
             self.df = pd.DataFrame([x for x in newDBData if x is not None])
@@ -271,16 +271,17 @@ class Database(object):
             self.df.to_csv(os.path.join(pathToTmp,"DBdistances.txt"),sep="\t", index=False)
 
 
-    def _createChunks(self,pathToTmp,entriesInChunks):
+    def _createChunks(self,pathToTmp,entriesInChunks,metricColumns):
         ""
         print("prepare chunks ...")
         c = []
         folderPath = os.path.join(pathToTmp,"dbMatches")
-        os.mkdir(folderPath)
+        if not os.path.exists(folderPath):
+            os.mkdir(folderPath)
         #n = int(self.df.index.size/self.params["n_jobs"])
         for n,chunk in enumerate(chunks(self.df.index,250)):
             print("chunk : {}".format(n))
-            chunkItems = [self._createSignleChunk(idx,entriesInChunks,pathToTmp) for idx in chunk]
+            chunkItems = [self._createSignleChunk(idx,entriesInChunks,pathToTmp,metricColumns) for idx in chunk]
             with open(os.path.join(folderPath, str(n)+".pkl"),"wb") as f:
                 pickle.dump(chunkItems,f)
             
@@ -291,13 +292,12 @@ class Database(object):
         
         return c
 
-    def _createSignleChunk(self,idx, entriesInChunks,pathToTmp):
+    def _createSignleChunk(self,idx, entriesInChunks,pathToTmp,metricColumns):
         E1 = self.df.loc[idx,"E1"]
         E2 = self.df.loc[idx,"E2"] 
         E1E2 = ''.join(sorted([E1,E2]))
         className = self.df.loc[idx,"Class"]
         requiredFiles = ["{}.npy".format(k) for k,v in  entriesInChunks.items() if E1E2 in v]
-        metricColumns = ["apex","euclidean","pearson","p_pearson"]
         return {"E1":E1,"E2":E2,"E1E2":E1E2,"className":className,"requiredFiles":requiredFiles,"metricColumns":metricColumns,"pathToTmp":pathToTmp}
 
     def _chunkInteraction(self,pathToChunk):
@@ -314,20 +314,23 @@ class Database(object):
 
                 data = np.load(os.path.join(pathToTmp,f),allow_pickle=True)
 
-                boolIdx = np.logical_and(data[:,0] == E1, data[:,1] == E2)
-            
+                boolIdx = data[:,2] == E1E2
+
+               # boolIdx = np.logical_and(data[:,0] == E1, data[:,1] == E2)
 
                 if any(boolIdx):
-                    dataDir = {metric:data[boolIdx,n+2][0] for n,metric in enumerate(metricColumns)}
-
+                    dataDir = OrderedDict([(metric,data[boolIdx,n+3][0]) for n,metric in enumerate(metricColumns)])
                 else:
-                   # boolIdx = data[:,2] == E1 + data[:,1] == E2
-                    boolIdx = np.logical_and(data[:,1] == E1, data[:,0] == E2)
-                    if any(boolIdx):
-                        dataDir = {metric:data[boolIdx,n+2][0] for n,metric in enumerate(metricColumns)}
+                    continue
 
-                    else:
-                        continue
+         #       else:
+                   # boolIdx = data[:,2] == E1 + data[:,1] == E2
+          #          boolIdx = np.logical_and(data[:,1] == E1, data[:,0] == E2)
+           #         if any(boolIdx):
+            #            dataDir = {metric:data[boolIdx,n+3][0] for n,metric in enumerate(metricColumns)}
+#
+ #                   else:
+  #                      continue
 
                 dataDir["E1"] = E1
                 dataDir["E2"] = E2 
@@ -336,63 +339,6 @@ class Database(object):
                 del data
                 gc.collect()  
                 return dataDir
-
-
-
-
-      #      dataDir = {}
-
-            
-
-       #     fileE1 = E1 + ".npy"
-       #     fileE2 = E2 + ".npy"#
-#
-#            if fileE1 in txtFiles:
-#
- #               df = np.load(os.path.join(pathToTmp,fileE1)) # read_csv(os.path.join(pathToTmp,fileE1), index_col=False)
-#
- #               if E2 in df[:,1]:
-#
- #                   boolIdx = df[:,1] == E2
-  ##                  dataDir = {metric:df[boolIdx,n+2][0] for n,metric in enumerate(metricColumns)}
-#
- #           if fileE2 in txtFiles:
-                
- #               df = np.load(os.path.join(pathToTmp,fileE2))
-#
-  #              if E1 in df[:,1]:
-
-   #                 boolIdx = df[:,1] == E1
-    #                dataDir = {metric:df[boolIdx,n + 2][0] for n,metric in enumerate(metricColumns)}
-     #       
-#
- ##           if len(dataDir) > 0:
-#
-      #          dataDir["E1"] = E1
- #               dataDir["E2"] = E2 
-  #              dataDir["Class"] = self.df.loc[idx,"Class"]   
-   #             del df
-    #            gc.collect()  
-     #           return dataDir
-
-            
-
-        
-        
-
-#        boolIdx = self.df[["E1","E2"]].apply(lambda x, df = metricDf, mCols = metricColumn :self.findMatch(x,df, mCols) , axis=1)
- #       print(boolIdx)
-
-  #      print("HWWWW")
-   #     print(metricDf)
-    #    print(self.df)
-     #  # print(self.df.columns)
-        #self.df = self.df.merge(metricDf, how="inner", on = ["E1","E2"])
-      #  print(self.df)
-       # #df = self.df.merge(metricDf, how="inner", on = ["E2","E2"])
-       
-       # boolIdx = metricDF[["E1","E2"]].apply(axis=1)
-        
 
     def matchInteractions(self,columnLabel, distanceMatrix):
         ""

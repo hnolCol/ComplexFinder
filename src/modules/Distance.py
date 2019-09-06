@@ -4,7 +4,7 @@ import pandas as pd
 import itertools
 from scipy.spatial.distance import pdist
 from scipy.spatial.distance import squareform
-from scipy.stats import pearsonr
+from scipy.stats import pearsonr, spearmanr
 from joblib import Parallel, delayed
 import os
 import gc 
@@ -53,8 +53,13 @@ class DistanceCalculator(object):
         for otherPeaks in otherSignalPeaks:
 
             apexDist.append([self._apex(p1,p2) for p1 in self.ownPeaks for p2 in otherPeaks])
+            
         minArgs = [np.argmin(x) for x in apexDist]
         return [np.min(x) for x in apexDist]
+
+    def spearman(self):
+        
+        return [1-spearmanr(Y,self.Y)[0] for Y in self.Ys]
 
     def calculateMetrices(self):
 
@@ -69,6 +74,10 @@ class DistanceCalculator(object):
 
             if metric == "pearson":
                 collectedDf["pearson"], collectedDf["p_pearson"] = zip(*self.pearson())
+
+            elif metric == "spearman":
+
+                collectedDf["spearman"] = self.spearman()
 
             elif metric == "euclidean":
 

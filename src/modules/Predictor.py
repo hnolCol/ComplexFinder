@@ -2,6 +2,7 @@
 
 
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
 from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
@@ -19,30 +20,36 @@ class Classifier(object):
         ""
         self.gridSerach = gridSearch
         self.n_jobs = n_jobs
-        self.classifier = self._initClassifier(classifierClass,n_jobs)
+        self.classifierClass = classifierClass
+        self.classifier = self._initClassifier()
 
 
-    def _initClassifier(self,classifierClass,n_jobs):
+    def _initClassifier(self):
         ""
-        if classifierClass in ["random forest","ensemble tree"]:
+        if self.classifierClass in ["random_forest","random forest","ensemble tree"]:
             return RandomForestClassifier(n_estimators=200,
                                             oob_score=True,
                                             min_samples_split=2,
-                                            n_jobs=n_jobs)
+                                            n_jobs=self.n_jobs)
+        elif self.classifierClass == "SVM":
+            
+            return SVC(gamma=2, C=1, probability=True)
 
     def _scaleFeatures(self,X):
         if not hasattr(self,"Scaler"):
             self.Scaler = StandardScaler()
-        return self.Scaler.fit_transform(X)
+            return self.Scaler.fit_transform(X)
+        else:
+            return self.Scaler.transform(X)
         
 
     def _gridOptimization(self,X,Y):
 
         gridSearch = GridSearchCV(self.classifier, 
-                                    scoring = "f1", 
+                                    scoring = "accuracy", 
                                     param_grid = self.gridSerach, 
                                     n_jobs = self.n_jobs, 
-                                    cv = 10, 
+                                    cv = 8, 
                                     verbose=5)
 
         gridSearch.fit(X,Y)
@@ -51,44 +58,65 @@ class Classifier(object):
 
         return gridSearch.best_params_
 
+    def featureImportance(self):
+        ""
+        #if self.classifierClass in ["random_forest","random forest","ensemble tree"]:
+
+        if hasattr(self.predictors[0],"feature_importances_"):
+            return self.predictors[0].feature_importances_
+
 
     def predict(self,X,scale=True):
         ""
-        if scale:
-            X = self._scaleFeatures(X)
-        print(self.bestClassifier.classes_)
-        print(self.bestClassifier.predict(X))
-        return self.bestClassifier.predict_proba(X)
+        probas_ = None
+        if hasattr(self,"predictors"):
+            if scale:
+                X = self._scaleFeatures(X)
+            for p in self.predictors:
+                if probas_ is None:
+                    probas_ = p.predict_proba(X)
+                else:
+                    probas_ = np.append(probas_,p.predict_proba(X), axis=1)
 
-    def fit(self, X, Y, optimizedParams=None):
+           # resultClass = np.mean(probas_[:,1::2],axis=1)
+            resultClass = probas_[:,1::2]
+            return resultClass
+
+    def fit(self, X, Y, optimizedParams=None, pathToResults = ''):
         ""
         print("predictor training started")
         X = self._scaleFeatures(X)
 
-        xTrain, xTest, yTrain, yTest = train_test_split(X,Y,test_size=0.2)
+       # xTrain, xTest, yTrain, yTest = train_test_split(X,Y,test_size=0.2)
 
         if self.gridSerach is not None:
             optimizedParams = self._gridOptimization(X,Y)
 
         #cv = StratifiedShuffleSplit(n_splits=10, test_size=0.2)
-
+        if optimizedParams is not None:
+            print("Optimized parameters")
+            print(optimizedParams)
         cv = StratifiedKFold(n_splits=3, shuffle=True)
-        
+        self.predictors = []
         tprs = []
         aucs = []
         mean_fpr = np.linspace(0, 1, 100)
         fig, ax = plt.subplots()
         i=0
-
+        probasOut_ = None
         for train, test in cv.split(X, Y):
+            classifier_ = self._initClassifier()
             if optimizedParams is not None:
-                self.classifier.set_params(**optimizedParams)
-            probas_ = self.classifier.fit(X[train], Y[train]).predict_proba(X[test])
-            print(self.classifier.feature_importances_)
-           # print(self.classifier.oob_score_)
-           # print(self.classifier.classes_)
-            #print(probas_)
-            # Compute ROC curve and area the curve
+                classifier_.set_params(**optimizedParams)
+
+            classifier_.fit(X[train], Y[train])
+            probas_ = classifier_.predict_proba(X[test])
+            self.predictors.append(classifier_)
+
+            if hasattr(classifier_,"feature_importances_"):
+                print("Feature Importance")
+                print(classifier_.feature_importances_)
+
             fpr, tpr, thresholds = roc_curve(Y[test], probas_[:, 1])
             tprs.append(interp(mean_fpr, fpr, tpr))
             tprs[-1][0] = 0.0
@@ -98,6 +126,11 @@ class Classifier(object):
                     label='ROC fold %d (AUC = %0.2f)' % (i, roc_auc))
             #self.classifier.fit(X,Y)
             i+=1
+            if probasOut_ is None:
+                    probasOut_ = classifier_.predict_proba(X)
+            else:
+                    probasOut_= np.append(probasOut_,classifier_.predict_proba(X), axis=1)
+
         print("predictor training done")
         ax.plot([0, 1], [0, 1], linestyle='--', lw=2, color='r',
         label='Chance', alpha=.8)
@@ -116,7 +149,13 @@ class Classifier(object):
         ax.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=.2,
                         label=r'$\pm$ 1 std. dev.')
         plt.legend()
-        plt.savefig("FDR.pdf")
+        if  pathToResults != '':
+            aucFile = os.path.join(pathToResults,"ROC curve.pdf")
+        else:
+            aucFile = "ROC curve.pdf"
+            
+        plt.savefig(aucFile)
+        return np.mean(probasOut_[:,1::2],axis=1)
 
 
 class ComplexBuilder(object):

@@ -8,7 +8,7 @@ from collections import OrderedDict
 from modules.Distance import DistanceCalculator
 from modules.signal import Signal
 from modules.Database import Database
-from modules.Predictor import Classifier
+from modules.Predictor import Classifier, ComplexBuilder
 from joblib import Parallel, delayed, dump, load
 import gc 
 import string
@@ -19,13 +19,14 @@ from multiprocessing import Pool
 from joblib import wrap_non_picklable_objects
 import matplotlib.pyplot as plt
 import seaborn as sns
+from sklearn.metrics import classification_report 
 
 
 filePath = os.path.dirname(os.path.realpath(__file__)) 
 pathToTmp = os.path.join(filePath,"tmp")
 
 RF_GRID_SEARCH = {#'bootstrap': [True, False],
- 'max_depth': [30,50,70],
+ 'max_depth': [70],#30,50,
  'max_features': ['sqrt','auto'],
  #'min_samples_leaf': [2, 3, 4],
  #'min_samples_split': [2, 3, 4],
@@ -59,13 +60,14 @@ class ComplexFinder(object):
                 indexIsID = True,
                 maxPeaksPerSignal = 5,
                 n_jobs = 4,
+                kFold = 5,
                 analysisName = None,
                 idColumn = "Uniprot ID",
                 databaseName="CORUM",
                 peakModel = "LorentzianModel",
                 imputeNaN = True,
                 classifierClass = "random_forest",
-                interactionProbabCutoff = 0,
+                interactionProbabCutoff = 0.6,
                 metrices = ["apex","euclidean","pearson","p_pearson","spearman","max_location"],
                 classiferGridSearch = RF_GRID_SEARCH):
         ""
@@ -74,6 +76,7 @@ class ComplexFinder(object):
             "indexIsID" : indexIsID,
             "idColumn" : idColumn,
             "n_jobs" : n_jobs,
+            "kFold" : kFold,
             "analysisName" : analysisName,
             "databaseName" : databaseName,
             "imputeNaN" : imputeNaN,
@@ -134,7 +137,7 @@ class ComplexFinder(object):
                 self.Signals[entryID] = Signal(signal.values,
                                                 ID=entryID, 
                                                 peakModel=peakModel, 
-                                                savePlots = False,
+                                                savePlots = True,
                                                 maxPeaks=self.params["maxPeaksPerSignal"],
                                                 metrices=self.params["metrices"],
                                                 pathToTmp = self.params["pathToTmp"]) 
@@ -155,7 +158,7 @@ class ComplexFinder(object):
         ""
         global entriesInChunks
         X = list(self.Signals.values())
-        print("\n\nStarting Distance Calculation ...")
+        print("\nStarting Distance Calculation ...")
         t1 = time.time()
 
         for n,Signal in enumerate(self.Signals.values()):
@@ -228,30 +231,33 @@ class ComplexFinder(object):
         ""
         #metricColumns = [col for col in self.DB.df.columns if any(x in col for x in self.params["metrices"])]
         folderToResults = os.path.join(self.params["pathToTmp"],"result")
-        if not os.path.exists:
+        if not os.path.exists(folderToResults):
             os.mkdir(folderToResults)
 
         totalColumns = self.params["metrices"] + ['Class']
         data = self.DB.df[totalColumns].dropna(subset=self.params["metrices"])
         self.Y = data['Class'].values
         X = data.loc[:,self.params["metrices"]].values
-        print(X)
 
         self.classifier = Classifier(
             classifierClass = self.params["classifierClass"],
             n_jobs=self.params['n_jobs'], 
             gridSearch = self.params["classiferGridSearch"])
 
-        probabilites = self.classifier.fit(X,self.Y,pathToResults=folderToResults)
+        probabilites = self.classifier.fit(X,self.Y,kFold=self.params["kFold"],pathToResults=folderToResults)
         
+        boolClass = probabilites > 0.5
+
         data["PredictionClass"] = probabilites
+
+        pd.DataFrame(
+            classification_report(self.Y,boolClass,digits=3,output_dict=True)).to_csv(os.path.join(self.params["pathToTmp"],"PredictorSummary.txt"),sep="\t", index=False)
 
         data.to_csv(os.path.join(self.params["pathToTmp"],"DBpred.txt"),sep="\t", index=False)
         
         self._plotFeatureImportance(folderToResults)
         
         print("DB prediction saved - DBpred.txt")
-
 
 
     def _loadPairs(self):
@@ -265,9 +271,28 @@ class ComplexFinder(object):
 
             X = np.load(os.path.join(self.params["pathToTmp"],chunk),allow_pickle=True)
             
-            yield (X, os.path.join(pathToPredict,chunk))
+            yield (X,os.path.join(pathToPredict,chunk))
+            #{"pathToChunk":os.path.join(pathToPredict,chunk),
+             #       "classifer": None,
+              #      "nMetrices":len(self.params["metrices"]),
+               #     "probCutoff":self.params["interactionProbabCutoff"]}
             
         
+    def _chunkPrediction(self,pathToChunk,classifier,nMetrices,probCutoff):
+        ""
+        X =  np.load(pathToChunk,allow_pickle=True)
+        boolSelfIntIdx = X[:,0] != X[:,1] 
+        X = X[boolSelfIntIdx]
+        classProba = classifier.predict(X[:,[n+3 for n in range(nMetrices)]])
+
+        boolPredIdx = classProba >= probCutoff
+        boolIdx = np.sum(boolPredIdx,axis=1) > 0
+        predX = np.append(X[:,2],classProba.reshape(X.shape[0],-1),axis=1)
+        np.save(
+                file = pathToChunk,
+                arr = predX)
+
+        return predX
 
 
 
@@ -275,15 +300,19 @@ class ComplexFinder(object):
         ""
 
         folderToOutput = os.path.join(self.params["pathToTmp"],"result")
-        #create prob columns of k=3 fold 
-        pColumns = ["Prob_{}".format(n) for n in range(3)]
+        #create prob columns of k fold 
+        pColumns = ["Prob_{}".format(n) for n in range(self.params["kFold"])]
         dfColumns = ["E1","E2","E1E2"] + self.params["metrices"] + pColumns + ["In DB"]
 
         if not os.path.exists(folderToOutput):
             os.mkdir(folderToOutput)
 
         predInteractions = None
-        for n,(X,pathToChunk) in enumerate(self._loadPairs()):
+       # predInteractions = Parallel(n_jobs=self.params["n_jobs"], verbose=5)(delayed(self._chunkPrediction)(
+        #                                                                **c) for c in self._loadPairs())
+                                                                    
+       
+        for X,pathToChunk in self._loadPairs():
             boolSelfIntIdx = X[:,0] == X[:,1] 
 
             X = X[boolSelfIntIdx == False]
@@ -292,7 +321,7 @@ class ComplexFinder(object):
 
             predX = np.append(X,classProba.reshape(X.shape[0],-1),axis=1)
             boolPredIdx = classProba >= self.params["interactionProbabCutoff"]
-            boolIdx = np.sum(boolPredIdx,axis=1) > 0
+            boolIdx = np.sum(boolPredIdx,axis=1) == self.params["kFold"]
             
 
             if predInteractions is None:
@@ -300,27 +329,29 @@ class ComplexFinder(object):
             else:
                 predInteractions = np.append(predInteractions,predX[boolIdx], axis=0)
 
-            np.save(
-                file = pathToChunk,
-                arr = predX)
+            #np.save(
+             #   file = pathToChunk,
+              #  arr = predX)
             
-            data = pd.DataFrame(predX, columns = dfColumns[:-1])
-            data["Class"] = data[pColumns].mean(axis=1) > 0.75
-            self._plotChunkSummary(data = data ,fileName = str(n), folderToOutput = folderToOutput)
+            #data = pd.DataFrame(predX, columns = dfColumns[:-1])
+            #data["Class"] = data[pColumns].mean(axis=1) > 0.75
+            #self._plotChunkSummary(data = data ,fileName = str(n), folderToOutput = folderToOutput)
+            del predX
+            gc.collect()
 
 
-        self.predInteractions = predInteractions
-        boolDbMatch = np.isin(self.predInteractions[:,2],self.DB.df["E1E2"])
+        #self.predInteractions = predInteractions
+        boolDbMatch = np.isin(predInteractions[:,2],self.DB.df["E1E2"])
         
-        self.predInteractions = np.append(self.predInteractions,boolDbMatch.reshape(self.predInteractions.shape[0],1),axis=1)
-        print(self.predInteractions)
-        print(self.predInteractions.size)
+        predInteractions = np.append(predInteractions,boolDbMatch.reshape(predInteractions.shape[0],1),axis=1)
+        
+        d = pd.DataFrame(predInteractions, columns = dfColumns)
 
-        d = pd.DataFrame(self.predInteractions, columns = dfColumns)
+        #d["Class"] = d[pColumns].mean(axis=1) > self.params["interactionProbabCutoff"]
 
-        d["Class"] = d[pColumns].mean(axis=1) > 0.75 #self.params["interactionProbabCutoff"]
-
-        d.to_csv(os.path.join(folderToOutput,"output.txt"), sep="\t")
+        d.to_csv(os.path.join(folderToOutput,"predictedInteractions.txt"), sep="\t")
+        
+        return d
 
     def _plotChunkSummary(self, data, fileName, folderToOutput):
         # scale features and plot decision function? 
@@ -334,6 +365,7 @@ class ComplexFinder(object):
         sns.boxplot(data = XX, ax=ax, y = "value", x = "variable", hue = "Class")
 
         plt.savefig(os.path.join(folderToOutput,"{}.pdf".format(fileName)))
+        plt.close()
         
         
     def _plotFeatureImportance(self,folderToOutput):
@@ -348,6 +380,7 @@ class ComplexFinder(object):
             ax.set_xticks(xPos)
             ax.set_xticklabels(self.params["metrices"], rotation = 45)
             plt.savefig(os.path.join(folderToOutput,"featureImportance.pdf"))
+            plt.close()
         
 
     def _randomStr(self,n):
@@ -355,6 +388,20 @@ class ComplexFinder(object):
         letters = string.ascii_lowercase + string.ascii_uppercase
         return "".join(random.choice(letters) for i in range(n))
         
+
+    def _clusterInteractions(self, predInts):
+        ""
+        print("\nPredict complexes")
+        cb = ComplexBuilder()
+        clusterLabels, intLabels, matrix , reachability, core_distances = cb.fit(predInts, metricColumns = self.params["metrices"], scaler=self.classifier._scaleFeatures)
+        df = pd.DataFrame().from_dict({"Entry":intLabels,"Cluster Labels":clusterLabels,"reachability":reachability,"core_distances":core_distances})
+        df = df.sort_values(by="Cluster Labels")
+        df = df.set_index("Entry")
+    
+        df.to_csv("Complexes.txt",sep="\t") 
+        pd.DataFrame(matrix,columns=intLabels,index=intLabels).loc[df.index,df.index].to_csv("SquareSorted.txt",sep="\t")
+        
+
 
     def _makeTmpFolder(self):
 
@@ -394,8 +441,9 @@ class ComplexFinder(object):
             self._loadReferenceDB()
             self._addMetricesToDB()
             self._trainPredictor()
-            self._predictInteractions()
-        
+            predInts = self._predictInteractions()
+            self._clusterInteractions(predInts)
+
 
 
 if __name__ == "__main__":
@@ -406,7 +454,7 @@ if __name__ == "__main__":
  #X = X.set_index("Uniprot ID")
   #  X
 
-   # ComplexFinder(indexIsID=False,analysisName="500restoreTry",classiferGridSearch=param_grid, classifierClass="SVM").run(X)
+   # ComplexFinder(indexIsID=False,analysisName="500restoreTry",classiferGridSearch=param_grid, classifierClass="SVM").run(X)""
     ComplexFinder(indexIsID=False,analysisName="2000restoreTry",classifierClass="random forest").run(X)
 
 

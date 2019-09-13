@@ -53,7 +53,7 @@ class DistanceCalculator(object):
         for otherPeaks in otherSignalPeaks:
 
             apexDist.append([self._apex(p1,p2) for p1 in self.ownPeaks for p2 in otherPeaks])
-            
+
         minArgs = [np.argmin(x) for x in apexDist]
         return [np.min(x) for x in apexDist]
 
@@ -90,7 +90,7 @@ class DistanceCalculator(object):
             elif metric == "max_location":
 
                 maxOwnY = np.argmax(self.Y)
-                collectedDf["max_location"] = [np.argmax(Y)-maxOwnY for Y in self.Ys]
+                collectedDf["max_location"] = [np.abs(np.argmax(Y)-maxOwnY) for Y in self.Ys]
 
         gc.collect()
         return collectedDf.values

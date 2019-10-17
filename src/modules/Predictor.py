@@ -82,7 +82,12 @@ class Classifier(object):
         probas_ = None
         if hasattr(self,"predictors"):
             if scale:
-                X = self._scaleFeatures(X)
+                try:
+                    X = self._scaleFeatures(X)
+                except:
+                    print("scale failed")
+                    print(X)
+                    return
             for p in self.predictors:
                 if probas_ is None:
                     probas_ = p.predict_proba(X)

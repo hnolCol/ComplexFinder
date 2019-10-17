@@ -155,6 +155,9 @@ class Signal(object):
         peakIdx = self._checkPeakIdx(peakIdx,self.maxPeaks)
         spec = self._generateSpec(np.arange(self.Y.size) , self.Y, N = peakIdx.size)
         modelComposite, params = self._findParametersForModels(spec,peakIdx)
+        if modelComposite is None:
+            return {"id":self.ID}
+        
         fitOutput = modelComposite.fit(self.Y, params, x=spec['x'])
         if self.savePlots:
             self.plotSummary(fitOutput,spec,self._calculateSquredR(fitOutput,spec),peakIdx)

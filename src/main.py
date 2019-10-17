@@ -67,7 +67,7 @@ class ComplexFinder(object):
                 peakModel = "LorentzianModel",
                 imputeNaN = True,
                 classifierClass = "random_forest",
-                interactionProbabCutoff = 0.6,
+                interactionProbabCutoff = 0.75,
                 metrices = ["apex","euclidean","pearson","p_pearson","spearman","max_location"],
                 classiferGridSearch = RF_GRID_SEARCH):
         ""
@@ -101,7 +101,7 @@ class ComplexFinder(object):
                 
                 np.save(os.path.join(self.params["pathToTmp"],"source"),self.X.values)
                 self.X = self.X.set_index(self.params["idColumn"])
-                self.X = self.X.astype(np.float)
+                self.X = self.X.astype(np.float32)
 
         else:
 
@@ -116,6 +116,8 @@ class ComplexFinder(object):
 
         for fitModel in signalModels:
             modelID = fitModel["id"]
+            if len(fitModel) == 1:
+                del self.Signals[modelID]
             if modelID in self.Signals:
                 for k,v in fitModel.items():
                     if k != 'id':
@@ -219,7 +221,10 @@ class ComplexFinder(object):
         print("Load positive data base")
         self.DB = Database()
         self.DB.pariwiseProteinInteractions("subunits(UniProt IDs)")
-        self.DB.filterDBByEntryList(self.X.index)
+        entryList = []
+        for x in self.X.index:
+            entryList.extend(x.split(";"))
+        self.DB.filterDBByEntryList(entryList)
         self.DB.addDecoy()
 
 
@@ -298,7 +303,8 @@ class ComplexFinder(object):
 
     def _predictInteractions(self):
         ""
-
+        del self.Signals
+        gc.collect()
         folderToOutput = os.path.join(self.params["pathToTmp"],"result")
         #create prob columns of k fold 
         pColumns = ["Prob_{}".format(n) for n in range(self.params["kFold"])]
@@ -314,11 +320,12 @@ class ComplexFinder(object):
        
         for X,pathToChunk in self._loadPairs():
             boolSelfIntIdx = X[:,0] == X[:,1] 
-
+            print("Current Chunk: ",pathToChunk)
             X = X[boolSelfIntIdx == False]
             #first two rows E1 E2, and E1E2, remove before predict
             classProba = self.classifier.predict(X[:,[n+3 for n in range(len(self.params["metrices"]))]])
-
+            if classProba is None:
+                continue
             predX = np.append(X,classProba.reshape(X.shape[0],-1),axis=1)
             boolPredIdx = classProba >= self.params["interactionProbabCutoff"]
             boolIdx = np.sum(boolPredIdx,axis=1) == self.params["kFold"]
@@ -341,6 +348,7 @@ class ComplexFinder(object):
 
 
         #self.predInteractions = predInteractions
+       # if False:
         boolDbMatch = np.isin(predInteractions[:,2],self.DB.df["E1E2"])
         
         predInteractions = np.append(predInteractions,boolDbMatch.reshape(predInteractions.shape[0],1),axis=1)
@@ -448,14 +456,15 @@ class ComplexFinder(object):
 
 if __name__ == "__main__":
 
-    X = pd.read_csv("../example-data/HeuselEtAlAebersoldLab.txt", 
-                    sep="\t", nrows=2000)
-
+   # X = pd.read_csv("../example-data/HeuselEtAlAebersoldLab.txt", 
+    #                sep="\t", nrows=2000)
+    X = pd.read_csv("../example-data/mariaRep01_pp.txt", 
+                    sep="\t")
  #X = X.set_index("Uniprot ID")
   #  X
 
    # ComplexFinder(indexIsID=False,analysisName="500restoreTry",classiferGridSearch=param_grid, classifierClass="SVM").run(X)""
-    ComplexFinder(indexIsID=False,analysisName="2000restoreTry",classifierClass="random forest").run(X)
+    ComplexFinder(indexIsID=False,analysisName="mariaMitoWT4",classifierClass="random forest").run(X)
 
 
 

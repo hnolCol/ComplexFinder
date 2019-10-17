@@ -77,6 +77,8 @@ class Database(object):
     def addDecoy(self):
         ""
         complexIdx = np.unique(self.df["ComplexID"])
+        if complexIdx.size == 0:
+            raise ValueError("No positive hits found in complex.")
         complexMembers = self.df["ComplexID"].value_counts()
         nData = len(self.df.index)
         randCombinations = np.random.randint(low=0,high=complexIdx.size, size = (nData,2))

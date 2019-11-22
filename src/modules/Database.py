@@ -198,6 +198,7 @@ class Database(object):
         ""
         self.dbs[fileName] = pd.read_csv(
                                         os.path.join(path,fileName),
+                                        index_col = "ComplexID",
                                         sep=sep)
 
     def _getFiles(self, folderPath, extn = 'txt'):
@@ -244,6 +245,60 @@ class Database(object):
         elif search in metricDf["E2E1"].values:
             return metricDf.loc[metricDf["E2E1"] == search,mCols]
 
+    @property
+    def indentifiedComplexes(self):
+        if hasattr(self,'uniqueComplexesIdentified'):
+            return self.uniqueComplexesIdentified
+   
+    def identifiableComplexes(self,complexMemberIds, ID = "20190823_CORUM.txt"):
+        ""
+        identifiableMebmers = OrderedDict()
+        if hasattr(self,'uniqueComplexesIdentified'):
+            for k in self.uniqueComplexesIdentified.keys():
+                identifiableMebmers[k] = {}
+                boolIdx = self.dbs[ID].index == k 
+                complexData = self.dbs[ID][boolIdx]
+                cMembers = complexData[complexMemberIds].tolist()[0].split(";")
+                identifiableMebmers[k]["n"] = len(cMembers)
+                identifiableMebmers[k]["members"] = cMembers
+        
+        return identifiableMebmers
+
+
+    def assignComplexToProtein(self, e, complexMemberIds, complexIDColumn, ID = "20190823_CORUM.txt", filterDict = {'Organism': ["Human"]}):
+        
+        if hasattr(self,'uniqueComplexesIdentified') == False:
+            self.uniqueComplexesIdentified = OrderedDict() 
+
+        if ID in self.dbs:
+            if hasattr(self,"filteredDfToMatch") == False:
+               
+                columnNames = list(filterDict.keys())
+                boolIdx = self.dbs[ID].isin(filterDict)[columnNames].sum(axis=1) == len(columnNames)
+                self.filteredDfToMatch = self.dbs[ID].loc[boolIdx,:]
+            
+            boolIdxC = [] 
+            splitIDs = e.split(";")
+            
+            for cMembers in self.filteredDfToMatch[complexMemberIds].tolist():
+                cMSplit = cMembers.split(";")
+                boolIdxC.append(any(x in cMSplit for x in splitIDs))
+     
+            eDf = self.filteredDfToMatch[boolIdxC]
+
+            complexesForE = eDf.index.tolist()
+
+            for c in  complexesForE:
+
+                if c not in self.uniqueComplexesIdentified:
+                    self.uniqueComplexesIdentified[c] = {"n":1,"members":[e]} 
+                else:
+                    self.uniqueComplexesIdentified[c]["n"] += 1
+                    self.uniqueComplexesIdentified[c]["members"].append(e)
+
+            return ';'.join([str(x) for x in  complexesForE])
+
+
 
     def matchMetrices(self,pathToTmp,entriesInChunks,metricColumns):#metricDf):
         ""
@@ -252,11 +307,9 @@ class Database(object):
         if os.path.exists(distanceFile):
 
             print("File found and loaded")
-            self.df = pd.read_csv(distanceFile, sep="\t", index_col=False)
+            self.dfMetrices = pd.read_csv(distanceFile, sep="\t", index_col=False)
 
         else:
-
-            txtFiles = [f for f in os.listdir(pathToTmp) if f.endswith(".npy")]
             
             t1 = time.time()
             newDBData = []
@@ -268,9 +321,9 @@ class Database(object):
             print("\n\nTime to macht {} interactions: {} secs".format(len(newDBData),time.time()-t1))
 
             
-            self.df = pd.DataFrame([x for x in newDBData if x is not None])
-            print(self.df)
-            self.df.to_csv(os.path.join(pathToTmp,"DBdistances.txt"),sep="\t", index=False)
+            self.dfMetrices  = pd.DataFrame([x for x in newDBData if x is not None])
+            print(self.dfMetrices )
+            self.dfMetrices.to_csv(os.path.join(pathToTmp,"DBdistances.txt"),sep="\t", index=False)
 
 
     def _createChunks(self,pathToTmp,entriesInChunks,metricColumns):
@@ -321,18 +374,9 @@ class Database(object):
                # boolIdx = np.logical_and(data[:,0] == E1, data[:,1] == E2)
 
                 if any(boolIdx):
-                    dataDir = OrderedDict([(metric,data[boolIdx,n+3][0]) for n,metric in enumerate(metricColumns)])
+                    dataDir = OrderedDict([(metric,data[boolIdx,n+4][0]) for n,metric in enumerate(metricColumns)])
                 else:
                     continue
-
-         #       else:
-                   # boolIdx = data[:,2] == E1 + data[:,1] == E2
-          #          boolIdx = np.logical_and(data[:,1] == E1, data[:,0] == E2)
-           #         if any(boolIdx):
-            #            dataDir = {metric:data[boolIdx,n+3][0] for n,metric in enumerate(metricColumns)}
-#
- #                   else:
-  #                      continue
 
                 dataDir["E1"] = E1
                 dataDir["E2"] = E2 

@@ -33,6 +33,10 @@ class DistanceCalculator(object):
         return np.sqrt( (p1['mu'] - p2['mu']) ** 2  + (p1['sigma'] - p2['sigma']) ** 2 )
 
 
+   
+
+
+
     def p_pears(self,u,v):
         "returns p value for pearson correlation"
         r, p = pearsonr(u,v)
@@ -49,13 +53,15 @@ class DistanceCalculator(object):
        
     def apex(self,otherSignalPeaks):
         "Calculates Apex Distance"
-        apexDist = []     
+        apexDist = []    
+        apexMinArg = [] 
         for otherPeaks in otherSignalPeaks:
+            
+            apexDistCalc, minPeaks = map(list,zip(*[(self._apex(p1,p2),("{}_{}".format(p1["ID"],p2["ID"]))) for p1 in self.ownPeaks for p2 in otherPeaks]))
+            apexDist.append(apexDistCalc)
+            apexMinArg.append(minPeaks)
 
-            apexDist.append([self._apex(p1,p2) for p1 in self.ownPeaks for p2 in otherPeaks])
-
-        minArgs = [np.argmin(x) for x in apexDist]
-        return [np.min(x) for x in apexDist]
+        return [(np.min(x),apexMinArg[n][np.argmin(x)]) for n,x in enumerate(apexDist)]
 
     def spearman(self):
         
@@ -85,7 +91,7 @@ class DistanceCalculator(object):
                     
             elif metric == "apex":
             
-                collectedDf["apex"] = self.apex(self.otherSignalPeaks)
+                collectedDf["apex"], collectedDf["apex_peakId"] = zip(*self.apex(self.otherSignalPeaks))
 
             elif metric == "max_location":
 
@@ -93,6 +99,13 @@ class DistanceCalculator(object):
                 collectedDf["max_location"] = [np.abs(np.argmax(Y)-maxOwnY) for Y in self.Ys]
 
         gc.collect()
+        if "apex_peakId" in collectedDf.columns:
+            
+            firstCols = ["E1","E2","E1E2","apex_peakId"]
+            columnsResorted = [col for col in collectedDf.columns if col not in firstCols]
+
+            collectedDf = collectedDf[firstCols + columnsResorted]
+
         return collectedDf.values
             #collectedDf.to_csv(pathToFile, index=False)
 

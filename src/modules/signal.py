@@ -101,7 +101,7 @@ class Signal(object):
         self._addParam(modelParams,
                 name=prefix+'sigma', 
                 value = 2.5,
-                min = 0.3, 
+                min = 0.05, 
                 max = 3)
 
         self._addParam(modelParams,
@@ -296,6 +296,8 @@ class Signal(object):
             params['ID'] = i
             params["mu"] = best_values[prefix+"center"]
             params["sigma"] = best_values[prefix+"sigma"]
+            params["height"] = self._getHeight(best_values,prefix) 
+            params["fwhm"] = self._getFWHM(best_values,prefix) 
             self.modelledPeaks.append(params)
 
         return self.modelledPeaks
@@ -308,6 +310,21 @@ class Signal(object):
             spec = self.spec
         return 1 - model.residual.var() / np.var(spec['y'])
 
+    def _getFWHM(self,params,prefix):
+
+        if self.peakModel == "LorentzianModel":
+            FWHM =  2 * params[prefix+"sigma"]  
+        else:
+            FWHM =  2.3548 * params[prefix+"sigma"]
+        return FWHM
+
+    def _getHeight(self,params,prefix):
+        if self.peakModel == "LorentzianModel":
+            height = params[prefix+"amplitude"] / (params[prefix+"sigma"] * np.pi )
+        else:
+            height =  params[prefix+"amplitude"] / (params[prefix+"sigma"] * np.sqrt(np.pi*2)) 
+        
+        return height
 
     def plotSummary(self, fitOutput, spec, R, peakIdx):
         ""
@@ -317,7 +334,7 @@ class Signal(object):
         if not os.path.exists(pathToPlotFolder):
             os.mkdir(pathToPlotFolder)
         pathToSaveFigure = os.path.join(pathToPlotFolder,fileName)
-
+        pathToTxt = os.path.join(pathToPlotFolder,"{}_r2_{}.txt".format(self.ID,round(R,3)))
         fig, ax = plt.subplots()
         components = fitOutput.eval_components(x=spec['x'])
         best_values = fitOutput.best_values
@@ -326,11 +343,14 @@ class Signal(object):
             ax.plot(spec['x'], components[prefix], 
                 linestyle="-", 
                 linewidth=0.5, 
-                label="s:{}, A:{}, c:{}".format(round(best_values[prefix+"sigma"],3),
+                label="s:{}, A:{}, c:{}, fwhm:{} maxH:{}".format(round(best_values[prefix+"sigma"],3),
                                                         round(best_values[prefix+"amplitude"],3),
-                                                        round(best_values[prefix+"center"],2)
+                                                        round(best_values[prefix+"center"],2),
+                                                        round(self._getFWHM(best_values,prefix) ,3),
+                                                        round(self._getHeight(best_values,prefix),3)
+                                                        )
                                                         
-            ))
+            )                                            
 
         ax.plot(spec['x'],self.Y , color="black" , linestyle="--", linewidth=0.5)
         for peak in peakIdx:
@@ -340,6 +360,22 @@ class Signal(object):
         ax.legend(prop={'size': 5})
         plt.savefig(pathToSaveFigure)
         plt.close()
+
+        with open(pathToTxt , "w") as f:
+            f.write("\t".join(["Key","ID","Amplitude","Center","Sigma","fwhm","height","auc"])+"\n")
+            for i, model in enumerate(spec['model']):
+                prefix = f'm{i}_'
+                f.write("\t".join([str(x) for x in [self.ID,
+                                   i,
+                                   round(best_values[prefix+"amplitude"],3),
+                                   round(best_values[prefix+"center"],2),
+                                   round(best_values[prefix+"sigma"],3),
+                                   round(self._getFWHM(best_values,prefix) ,3),
+                                   round(self._getHeight(best_values,prefix),3),
+                                   round(np.trapz(components[prefix],dx = 0.2),3)]])+"\n")
+
+
+
 
     def __getstate__(self):
         state = self.__dict__.copy()

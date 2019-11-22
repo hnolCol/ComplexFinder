@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 from scipy import interp
 import matplotlib.pyplot as plt
-from sklearn.cluster import OPTICS
+from sklearn.cluster import OPTICS, AgglomerativeClustering, AffinityPropagation
 import os 
 from scipy.spatial.distance import squareform
 from sklearn.preprocessing import MinMaxScaler
@@ -84,8 +84,9 @@ class Classifier(object):
             if scale:
                 try:
                     X = self._scaleFeatures(X)
-                except:
+                except Exception as e:
                     print("scale failed")
+                    print(e)
                     print(X)
                     return
             for p in self.predictors:
@@ -193,54 +194,67 @@ class Classifier(object):
 class ComplexBuilder(object):
 
 
-    def __init__(self):
+    def __init__(self,method="OPTICS"):
         ""
-        self.optics = OPTICS(min_samples=2,metric="precomputed", n_jobs=4)
+        if method == "OPTICS":
+            self.clustering = OPTICS(min_samples=2,metric="precomputed", n_jobs=4)
+        elif method == "AGGLOMERATIVE_CLUSTERING":
+            self.clustering = AgglomerativeClustering(affinity="precomputed")
+        elif method == "AFFINITY_PROPAGATION":
+            self.clustering = AffinityPropagation(affinity="precomputed")
+
+        self.method = method
+
+    def set_params(self, params):
+
+        self.clustering.set_params(**params) 
 
 
-    def fit(self, X, metricColumns, scaler = None):
+    def fit(self, X, metricColumns, scaler = None, inv = False, poolMethod="min"):
         ""
-        print("Generate Square Matrix ..")
-        X, labels = self._makeSquareMatrix(X, metricColumns, scaler)
-        print("done .. - starting clustering")
-        clusterLabels = self.optics.fit_predict(X)
-        return clusterLabels, labels, X, self.optics.reachability_[self.optics.ordering_], self.optics.core_distances_[self.optics.ordering_]
+      #  print("Generate Square Matrix ..")
+        X, labels = self._makeSquareMatrix(X, metricColumns, scaler, inv,  poolMethod)
+      #  print("done .. - starting clustering")
+        if self.method == "OPTICS":
+            clusterLabels = self.clustering.fit_predict(X)
+            return clusterLabels, labels, X, self.clustering.reachability_[self.clustering.ordering_], self.clustering.core_distances_[self.clustering.ordering_]
+        elif self.method in ["AGGLOMERATIVE_CLUSTERING","AFFINITY_PROPAGATION"]:
+            clusterResult = self.clustering.fit_predict(X)
+            return clusterResult, labels, X, ["None"] * labels.size, ["None"] * labels.size
         
-    def _makeSquareMatrix(self, X, metricColumns, scaler):
+        
+    def _makeSquareMatrix(self, X, metricColumns, scaler, inv,  poolMethod):
         import time
         if scaler is None:
-            X["meanDistance"] = X[metricColumns].mean(axis=1)
+            if poolMethod == "mean":
+                X["meanDistance"] = X[metricColumns].mean(axis=1)
+            elif poolMethod == "min":
+                X["meanDistance"] = X[metricColumns].min(axis=1)
         else:
-            X["meanDistance"] = scaler(X[metricColumns]).mean(axis=1)
+            if poolMethod == "mean":
+                X["meanDistance"] = scaler(X[metricColumns]).mean(axis=1)
+            elif poolMethod == "min":
+                X["meanDistance"] = scaler(X[metricColumns]).min(axis=1)
+            
 
-        uniqueValues = np.unique(X[["E1","E2"]])
+        if inv:
+            X['meanDistance'] = 1 - X['meanDistance']
+
+        uniqueValues = np.unique(X[["E1p","E2p"]])
         nCols = nRows = uniqueValues.size 
+        print("Creating {} x {} distance matrix".format(nCols,nCols))
         matrix = np.full(shape=(nRows,nCols), fill_value = 3.0)
 
-        print(nCols, "is the number of columns in square matrix\nwhich correpsonds to the number of proteins for which a protein-protein interaction was found.")
-        
+       # print(nCols, "is the number of columns in square matrix\nwhich correpsonds to the number of proteins for which a protein-protein interaction was found.")
         
         t1 = time.time()
 
-        for row in X[["E1","E2","meanDistance"]].values:
+        for row in X[["E1p","E2p","meanDistance"]].values:
             
             nRow = np.where(uniqueValues == row[0])
             nCol = np.where(uniqueValues == row[1])
             matrix[[nRow,nCol],[nCol,nRow]] = row[2]
-        
-       # for nRow in range(nRows-1):
-        #    if nRow % 50 == 0:
-         #       print(nRow, "rows done.")
-          #  for nCol in range(nRow+1,nRows):
-           #     E1,E2 = uniqueValues[nCol], uniqueValues[nRow]
-                #E1E2 = ''.join(sorted([E1,E2]))
-            #    boolIdx = X["E1E2"] == E1E2
-             #   if any(boolIdx):
-              #      matrix[nRow,nCol] = X.loc[boolIdx,"meanDistance"]
-               #     matrix[nCol,nRow] = X.loc[boolIdx,"meanDistance"]
-               
-
-       # matrix = MinMaxScaler().fit_transform(matrix) 
+       
         matrix = (matrix - np.min(matrix)) / (np.max(matrix) - np.min(matrix))
         np.fill_diagonal(matrix,0)
         

@@ -64,6 +64,9 @@ class ComplexFinder(object):
 
     def __init__(self,
                 indexIsID = True,
+                plotSignalProfiles = True,
+                removeSingleDataPointPeaks = True,
+                savePeakModels = True,
                 maxPeaksPerSignal = 9,
                 n_jobs = 4,
                 kFold = 5,
@@ -93,7 +96,10 @@ class ComplexFinder(object):
             "retrainClassifier" : retrainClassifier,
             "interactionProbabCutoff":interactionProbabCutoff,
             "maxPeaksPerSignal" : maxPeaksPerSignal,
-            "classiferGridSearch" : classiferGridSearch
+            "classiferGridSearch" : classiferGridSearch,
+            "plotSignalProfiles" : plotSignalProfiles,
+            "savePeakModels" : savePeakModels,
+            "removeSingleDataPointPeaks" : removeSingleDataPointPeaks
             }
         print("\n" + str(self.params))
     
@@ -147,10 +153,12 @@ class ComplexFinder(object):
                 self.Signals[entryID] = Signal(signal.values,
                                                 ID=entryID, 
                                                 peakModel=peakModel, 
-                                                savePlots = True,
+                                                savePlots = self.params["plotSignalProfiles"],
+                                                savePeakModels = self.params["savePeakModels"],
                                                 maxPeaks=self.params["maxPeaksPerSignal"],
                                                 metrices=self.params["metrices"],
-                                                pathToTmp = self.params["pathToTmp"]) 
+                                                pathToTmp = self.params["pathToTmp"],
+                                                removeSingleDataPointPeaks = self.params["removeSingleDataPointPeaks"]) 
 
             
             t1 = time.time()
@@ -634,13 +642,13 @@ if __name__ == "__main__":
    # X = pd.read_csv("../example-data/HeuselEtAlAebersoldLab.txt", 
     #                sep="\t")
     X = pd.read_csv("../example-data/SILAC_01.txt", 
-                   # nrows = 200,
+                    nrows = 20,
                     sep="\t")
  #X = X.set_index("Uniprot ID")
   #  X
 
    # ComplexFinder(indexIsID=False,analysisName="500restoreTry",classiferGridSearch=param_grid, classifierClass="SVM").run(X)""
-    ComplexFinder(indexIsID=False,analysisName="WT1_SILAC8",classifierClass="random forest",retrainClassifier=False,interactionProbabCutoff = 0.6).run(X)
+    ComplexFinder(indexIsID=False,analysisName="WT1_SILAC8_False",classifierClass="random forest",retrainClassifier=False,interactionProbabCutoff = 0.6,removeSingleDataPointPeaks=False).run(X)
 
 
 

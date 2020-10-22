@@ -14,7 +14,6 @@ class DistanceCalculator(object):
     def __init__(self, Y, E2, ID, otherSignalPeaks, ownPeaks, metrices = ["apex","euclidean","pearson","p_pearson"] ,pathToTmp = '', chunkName = ''):
         ""
         self.Y = Y
-      #  self.Ys = Ys
         self.ID = ID
         self.E2s = E2
         self.ownPeaks = ownPeaks
@@ -31,10 +30,6 @@ class DistanceCalculator(object):
         ""
 
         return np.sqrt( (p1['mu'] - p2['mu']) ** 2  + (p1['sigma'] - p2['sigma']) ** 2 )
-
-
-   
-
 
 
     def p_pears(self,u,v):
@@ -116,9 +111,6 @@ if __name__ == "__main__":
         [3,4],
         [4,3]
     ])
-
-
-
     print(DistanceCalculator(X).apex(X))
 
 

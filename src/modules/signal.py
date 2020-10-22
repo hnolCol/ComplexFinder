@@ -16,7 +16,17 @@ import time
 
 class Signal(object):
 
-    def __init__(self, Y, ID= "", peakModel = 'LorentzianModel', nonNan = 4, maxPeaks = 12, savePlots = True , metrices = [], pathToTmp = ""):
+    def __init__(self, 
+            Y, 
+            ID= "", 
+            peakModel = 'LorentzianModel', 
+            nonNan = 4, 
+            maxPeaks = 12, 
+            savePlots = True, 
+            savePeakModels = True, 
+            metrices = [], 
+            pathToTmp = "", 
+            removeSingleDataPointPeaks = True):
 
         self.Y = Y 
         self.ID = ID
@@ -25,6 +35,9 @@ class Signal(object):
         self.savePlots = savePlots 
         self.metrices = metrices
         self.pathToTmp = pathToTmp
+        self.savePeakModels = savePeakModels
+        if removeSingleDataPointPeaks:
+            self.Y = self._removeSingleDataPointPeaks()
 
     def _findNaNs(self,Y):
         "Finds nans in array"
@@ -36,6 +49,33 @@ class Signal(object):
         if N < 1:
             N  = 2  
         return N
+
+    def _removeSingleDataPointPeaks(self):
+        "Removes signal data where a peak would only be made it by one data point"
+        flilteredY = []
+
+        for i,x in enumerate(self.Y):
+            if i == 0: #first item is different
+                if self.Y[i+1] == 0:
+                    flilteredY.append(0)
+                else:
+                    flilteredY.append(x)
+
+            elif i == self.Y.size - 1: #last item also
+                if self.Y[-1] != 0 and self.Y[-1]:
+                    flilteredY.append(0)
+                else:
+                    flilteredY.append(x)
+
+            else:
+                if self.Y[i-1] == 0 and self.Y[i+1] == 0:
+                    flilteredY.append(0)
+                else:
+                    flilteredY.append(x)
+
+        print(self.Y)
+        print(flilteredY)
+        return np.array(flilteredY)
 
     def isValid(self, nonNan = 4):
         ""
@@ -159,7 +199,7 @@ class Signal(object):
             return {"id":self.ID}
         
         fitOutput = modelComposite.fit(self.Y, params, x=spec['x'])
-        if self.savePlots:
+        if self.savePlots or self.savePeakModels:
             self.plotSummary(fitOutput,spec,self._calculateSquredR(fitOutput,spec),peakIdx)
         
         return {"id":self.ID,"fitOutput":fitOutput,'spec':spec,'peakIdx':peakIdx}
@@ -328,53 +368,53 @@ class Signal(object):
 
     def plotSummary(self, fitOutput, spec, R, peakIdx):
         ""
-
-        fileName = "{}.pdf".format(self.ID)
-        pathToPlotFolder = os.path.join(self.pathToTmp,"modelPlots")
-        if not os.path.exists(pathToPlotFolder):
-            os.mkdir(pathToPlotFolder)
-        pathToSaveFigure = os.path.join(pathToPlotFolder,fileName)
-        pathToTxt = os.path.join(pathToPlotFolder,"{}_r2_{}.txt".format(self.ID,round(R,3)))
-        fig, ax = plt.subplots()
-        components = fitOutput.eval_components(x=spec['x'])
-        best_values = fitOutput.best_values
-        for i, model in enumerate(spec['model']):
-            prefix = f'm{i}_'
-            ax.plot(spec['x'], components[prefix], 
-                linestyle="-", 
-                linewidth=0.5, 
-                label="s:{}, A:{}, c:{}, fwhm:{} maxH:{}".format(round(best_values[prefix+"sigma"],3),
-                                                        round(best_values[prefix+"amplitude"],3),
-                                                        round(best_values[prefix+"center"],2),
-                                                        round(self._getFWHM(best_values,prefix) ,3),
-                                                        round(self._getHeight(best_values,prefix),3)
-                                                        )
-                                                        
-            )                                            
-
-        ax.plot(spec['x'],self.Y , color="black" , linestyle="--", linewidth=0.5)
-        for peak in peakIdx:
-            ax.axvline(peak, color="darkgrey",linestyle="--",linewidth=0.1)
-        ax.set_title("R^2:{}".format(round(R,3)))
-        #                                             
-        ax.legend(prop={'size': 5})
-        plt.savefig(pathToSaveFigure)
-        plt.close()
-
-        with open(pathToTxt , "w") as f:
-            f.write("\t".join(["Key","ID","Amplitude","Center","Sigma","fwhm","height","auc"])+"\n")
+        if self.savePlots:
+            fileName = "{}.pdf".format(self.ID)
+            pathToPlotFolder = os.path.join(self.pathToTmp,"modelPlots")
+            if not os.path.exists(pathToPlotFolder):
+                os.mkdir(pathToPlotFolder)
+            pathToSaveFigure = os.path.join(pathToPlotFolder,fileName)
+            
+            fig, ax = plt.subplots()
+            components = fitOutput.eval_components(x=spec['x'])
+            best_values = fitOutput.best_values
             for i, model in enumerate(spec['model']):
                 prefix = f'm{i}_'
-                f.write("\t".join([str(x) for x in [self.ID,
-                                   i,
-                                   round(best_values[prefix+"amplitude"],3),
-                                   round(best_values[prefix+"center"],2),
-                                   round(best_values[prefix+"sigma"],3),
-                                   round(self._getFWHM(best_values,prefix) ,3),
-                                   round(self._getHeight(best_values,prefix),3),
-                                   round(np.trapz(components[prefix],dx = 0.2),3)]])+"\n")
+                ax.plot(spec['x'], components[prefix], 
+                    linestyle="-", 
+                    linewidth=0.5, 
+                    label="s:{}, A:{}, c:{}, fwhm:{} maxH:{}".format(round(best_values[prefix+"sigma"],3),
+                                                            round(best_values[prefix+"amplitude"],3),
+                                                            round(best_values[prefix+"center"],2),
+                                                            round(self._getFWHM(best_values,prefix) ,3),
+                                                            round(self._getHeight(best_values,prefix),3)
+                                                            )
+                                                            
+                )                                            
 
+            ax.plot(spec['x'],self.Y , color="black" , linestyle="--", linewidth=0.5)
+            for peak in peakIdx:
+                ax.axvline(peak, color="darkgrey",linestyle="--",linewidth=0.1)
+            ax.set_title("R^2:{}".format(round(R,3)))
+                                                     
+            ax.legend(prop={'size': 5})
+            plt.savefig(pathToSaveFigure)
+            plt.close()
 
+        if self.savePeakModels:
+            pathToTxt = os.path.join(pathToPlotFolder,"{}_r2_{}.txt".format(self.ID,round(R,3)))
+            with open(pathToTxt , "w") as f:
+                f.write("\t".join(["Key","ID","Amplitude","Center","Sigma","fwhm","height","auc"])+"\n")
+                for i, model in enumerate(spec['model']):
+                    prefix = f'm{i}_'
+                    f.write("\t".join([str(x) for x in [self.ID,
+                                    i,
+                                    round(best_values[prefix+"amplitude"],3),
+                                    round(best_values[prefix+"center"],2),
+                                    round(best_values[prefix+"sigma"],3),
+                                    round(self._getFWHM(best_values,prefix) ,3),
+                                    round(self._getHeight(best_values,prefix),3),
+                                    round(np.trapz(components[prefix],dx = 0.2),3)]])+"\n")
 
 
     def __getstate__(self):

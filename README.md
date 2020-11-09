@@ -24,9 +24,30 @@ The rating of the clustering takes into account, the number of correct protein-p
 
  ![Cluster identifiation](/img/workflow.png)
 
+## Installation
 
+Download the zip file containing the source code from github.
+Navigate to the folder in terminal/command line tool.
+On Mac / Linux:
+```
+#create virt env
+python3 -m venv env
+#activate
+source env/bin/activate
+#install packages from req file
+pip install -r requirements.txt
+```
+For windows user:
+```
+#create virt env 
+py -m venv env
+#actve
+.\env\Scripts\activate
+#install packages from req file
+pip3 install -r requirements.txt
+````
 
- # Usage Example
+## Usage Example
 
 Upon downlaod and extraction of the package. You can find example data in the example-data folder. 
 To run the anaylsis, you can enter:
@@ -39,7 +60,7 @@ You can also pass a folder path to run. This will yield in the anaylsis of each 
 
 ```python
 import os
-from .src.main import ComplexFinder
+from main import ComplexFinder
 folderPath = os.path(".","<my folder>")
 ComplexFinder().run(folderPath)
 ```
@@ -52,14 +73,13 @@ ComplexFinder(analysisName = ["SILAC_01","SILAC_02"]).run([x01,x02]) #the result
 ```
 
 
-
 ## Parameters
 Find below parameters to set. The default is given in brackets after the parameter name.
 
-* indexIsID [True]
-* plotSignalProfiles [True]
-* removeSingleDataPointPeaks [True]
-* <del>savePeakModels [True] </del> *depracted. always True and will be removed in the next version*.
+* indexIsID [True] bool.
+* plotSignalProfiles [True] bool.
+* removeSingleDataPointPeaks [True] bool.
+* <del>savePeakModels [True]</del> *depracted. always True and will be removed in the next version*.
 * maxPeaksPerSignal [9]
 * minDistBetweenPeaks [3] Distance in fractions (int) between two peaks. Setting this to a smaller number results in more peaks.
 * n_jobs [4] Number of workers to model peaks, to calculate distance pairs and to train and use the classifer.
@@ -69,11 +89,11 @@ Find below parameters to set. The default is given in brackets after the paramet
 * databaseName ["CORUM"]
 * peakModel ["LorentzianModel"],
 * imputeNaN [True],
-* classifierClass ["random_forest"]
+* classifierClass ["random_forest"] string. Must be string 
 * retrainClassifier [False]
 * interactionProbabCutoff [0.7]
 * metrices [["apex","euclidean","pearson","p_pearson","spearman","max_location"]]
-* classiferGridSearch = RF_GRID_SEARCH
+* classiferGridSearch = RF_GRID_SEARCH (see below). dict with keywords matching parameters/settings of estimator (SVM, random forest) and list of values forming the grid used to find the best estimator settings (evaluated by k-fold cross validation). Runtime is effected by number of parameter settings as well as k-fold. 
 * smoothSignal [True]):
 
 ```python
@@ -87,20 +107,46 @@ RF_GRID_SEARCH = {
                 }
 ```
 
+Sklearn library is used for predictions. Please check the comprehensive [documention](https://scikit-learn.org/stable/user_guide.html) for more details and for construction of a grid search dict. 
+
  # Future Directions
 
+In the future, we would like to implement the following features:
 
+* Web application with an easy uster interface to proide easy access to the pipeline
+* Implement more classifiers. 
+* Test various peak models for better performance. 
 
  # Requirements
 
-The following python packages are required to run the scripts. 
- * lmfit
- * matplotlib
- * numpy
- * pandas
- * scipy
- * seaborn
- * sklearn
+The following python packages are required to run the scripts (from the requirements.txt file.)
+
+* asteval==0.9.19
+* certifi==2020.11.8
+* cycler==0.10.0
+* Cython==0.29.21
+* future==0.18.2
+* hdbscan==0.8.26
+* joblib==0.17.0
+* kiwisolver==1.3.1
+* llvmlite==0.34.0
+* lmfit==1.0.1
+* matplotlib==3.3.2
+* numba==0.51.2
+* numpy==1.19.4
+* pandas==1.1.4
+* Pillow==8.0.1
+* pyparsing==2.4.7
+* python-dateutil==2.8.1
+* pytz==2020.4
+* scikit-learn==0.23.2
+* scipy==1.5.4
+* seaborn==0.11.0
+* six==1.15.0
+* threadpoolctl==2.1.0
+* umap-learn==0.4.6
+* uncertainties==3.1.4
+
 
 
 # Contact 

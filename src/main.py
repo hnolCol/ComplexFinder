@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import classification_report, homogeneity_score, v_measure_score
 from sklearn.model_selection import ParameterGrid
-from sklearn.externals import joblib
+import joblib
 
 filePath = os.path.dirname(os.path.realpath(__file__)) 
 pathToTmp = os.path.join(filePath,"tmp")
@@ -670,7 +670,7 @@ class ComplexFinder(object):
                 dfEmbed = pd.DataFrame(embedd)
                 dfEmbed["clusterLabels"] = clusterLabels
                 dfEmbed["labels"] = intLabels
-                dfEmbed.to_csv(os.path.join(pathToFolder,"UMAP_Embeding_{}.txt".format(n),sep="\t")
+                dfEmbed.to_csv(os.path.join(pathToFolder,"UMAP_Embeding_{}.txt".format(n)),sep="\t")
                 #plot embedding.
                 fig, ax = plt.subplots()
                 ax.scatter(embedd[:,0],embedd[:,1],s=50, c=clusterLabels, cmap='Spectral')

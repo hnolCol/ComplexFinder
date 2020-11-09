@@ -81,6 +81,7 @@ class DistanceCalculator(object):
         Apex score between two peaks.
 
         """
+        
         return np.sqrt( (p1['mu'] - p2['mu']) ** 2  + (p1['sigma'] - p2['sigma']) ** 2 )
 
 

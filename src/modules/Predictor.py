@@ -27,10 +27,26 @@ def chunks(l, n):
         yield l[i:i + n]
 
 class Classifier(object):
-    ""
-
+    
     def __init__(self, classifierClass = "random forest", n_jobs = 4, gridSearch = None):
-        ""
+        """Classifier module for prediction of positive / negative feature interaction
+
+        Note
+        ----
+
+
+        
+        Parameters
+        ----------
+        classifierClass : str
+            Name of classifier matching a sklearn classifier name
+        n_jobs : int
+            Number of workers used by the LokyBackend
+        gridSearch : dict or None
+            Parameter gridsearch to be used for estimator optimization.
+
+        """
+
         self.gridSerach = gridSearch
         self.n_jobs = n_jobs
         self.classifierClass = classifierClass
@@ -63,7 +79,7 @@ class Classifier(object):
                                     param_grid = self.gridSerach, 
                                     n_jobs = self.n_jobs, 
                                     cv = 8, 
-                                    verbose=5)
+                                    verbose=4)
 
         gridSearch.fit(X,Y)
 
@@ -71,9 +87,21 @@ class Classifier(object):
 
         return gridSearch.best_params_
 
-    def featureImportance(self):
-        ""
-        #if self.classifierClass in ["random_forest","random forest","ensemble tree"]:
+
+    def getFeatureImportance(self):
+        """
+        Returns estimatore feature imporantance, if estimator allows for this.
+
+        Parameters
+        ----------
+    
+
+        Returns
+        -------
+        Array of feature importances (sum = 1)
+
+        """
+        
 
         if hasattr(self.predictors[0],"feature_importances_"):
             return self.predictors[0].feature_importances_
@@ -89,7 +117,6 @@ class Classifier(object):
                 except Exception as e:
                     print("scale failed")
                     print(e)
-                    print(X)
                     return
             for p in self.predictors:
                 if probas_ is None:
@@ -101,15 +128,38 @@ class Classifier(object):
             resultClass = probas_[:,1::2]
             return resultClass
 
-    def fit(self, X, Y, kFold = 3, optimizedParams=None, pathToResults = ''):
-        ""
+    def fit(self, X, Y, kFold = 3, optimizedParams=None, pathToResults = '', plotROCCurve = True):
+        """
+        Runs grid search estimator optimization
+
+        Parameters
+        ----------
+        X : two dimensional numpy array
+            Distance matrix for feature pairs
+        Y : np.array
+            Class labels (1 - 0) for postive 
+            and negative interaction
+        optimizedParams: dict or None
+            Already optimized parameters set to the classifier.
+        pathToResults : str
+            Path to the folder in which the results should be stored.
+        plotROCCurve : bool.
+            If True a pdf will be created showing the ROC curve of 
+            trained classifier with individual k-fold line
+
+
+        Returns
+        -------
+        Array of feature importances (sum = 1)
+
+        """
         print("predictor training started")
         X = self._scaleFeatures(X)
 
         rocCurveData = OrderedDict()
        # xTrain, xTest, yTrain, yTest = train_test_split(X,Y,test_size=0.2)
 
-        if self.gridSerach is not None:
+        if self.gridSerach is not None and optimizedParams is None:
             optimizedParams = self._gridOptimization(X,Y)
 
         #cv = StratifiedShuffleSplit(n_splits=10, test_size=0.2)
@@ -123,7 +173,7 @@ class Classifier(object):
         mean_fpr = np.linspace(0, 1, 100)
         fig, ax = plt.subplots()
         i=0
-        probasOut_ = None
+        probasOut = None
         for train, test in cv.split(X, Y):
             classifier_ = self._initClassifier()
             if optimizedParams is not None:
@@ -146,38 +196,50 @@ class Classifier(object):
             aucs.append(roc_auc)
             ax.plot(fpr, tpr, lw=1, alpha=0.3,
                     label='ROC fold %d (AUC = %0.2f)' % (i, roc_auc))
-            #self.classifier.fit(X,Y)
             i+=1
-            if probasOut_ is None:
-                    probasOut_ = classifier_.predict_proba(X)
+
+            if probasOut is None: 
+                    probasOut = classifier_.predict_proba(X)
             else:
-                    probasOut_= np.append(probasOut_,classifier_.predict_proba(X), axis=1)
+                    probasOut = np.append(probasOut_,classifier_.predict_proba(X), axis=1)
 
         print("predictor training done")
-        ax.plot([0, 1], [0, 1], linestyle='--', lw=2, color='r',
-        label='Chance', alpha=.8)
+        if plotROCCurve:
+            #plotting
+            ax.plot(    [0, 1], 
+                        [0, 1], 
+                        linestyle='--', 
+                        lw=2, color='r',
+                        label='Chance', 
+                        alpha=.8)
 
-        mean_tpr = np.mean(tprs, axis=0)
-        mean_tpr[-1] = 1.0
-        mean_auc = auc(mean_fpr, mean_tpr)
-        std_auc = np.std(aucs)
-        ax.plot(mean_fpr, mean_tpr, color='b',
-                label=r'Mean ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, std_auc),
-                lw=2, alpha=.8)
+            mean_tpr = np.mean(tprs, axis=0)
+            mean_tpr[-1] = 1.0
+            mean_auc = auc(mean_fpr, mean_tpr)
+            std_auc = np.std(aucs)
+            ax.plot(mean_fpr, mean_tpr, color='b',
+                    label=r'Mean ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, std_auc),
+                    lw=2, alpha=.8)
 
-        std_tpr = np.std(tprs, axis=0)
-        tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
-        tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
-        ax.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=.2,
-                        label=r'$\pm$ 1 std. dev.')
-        plt.legend()
-        if  pathToResults != '':
-            aucFile = os.path.join(pathToResults,"ROC curve.pdf")
-        else:
-            aucFile = "ROC curve.pdf"
+            std_tpr = np.std(tprs, axis=0)
+            tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
+            tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
+            ax.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=.2,
+                            label=r'$\pm$ 1 std. dev.')
+            plt.legend()
+            if  pathToResults != '':
+                aucFile = os.path.join(pathToResults,"ROC curve.pdf")
+            else:
+                aucFile = "ROC curve.pdf"
 
-        plt.savefig(aucFile)
+            plt.savefig(aucFile)
+        
+        # save ROC cure data
+        meanProbsOut = self.saveToROCCurveData(rocCurveData,probasOut, pathToResults)
+        return meanProbsOut
 
+    def saveToROCCurveData(self,rocCurveData, probasOut, pathToResults):
+        ""
         maxValues = np.max([x.size for x in rocCurveData.values()])
         rocData = pd.DataFrame()
         for k,v in rocCurveData.items():
@@ -190,7 +252,7 @@ class Classifier(object):
 
         rocData.to_csv(os.path.join(pathToResults,"rocCurveData.txt"),sep="\t")
 
-        return np.mean(probasOut_[:,1::2],axis=1)
+        return np.mean(probasOut[:,1::2],axis=1)
 
 
 class ComplexBuilder(object):

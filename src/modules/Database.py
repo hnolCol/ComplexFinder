@@ -21,7 +21,21 @@ class Database(object):
 
 
     def __init__(self):
-        ""
+        """Database Module. 
+
+        The pipeline requires a database containing positve feature interactions.
+        This module find interactions present in the dataset to be analysed,
+        creates decoy interactions and matches metrices to databases. 
+
+
+        Note
+        ----
+        
+        Parameters
+        ----------
+        
+       
+        """
         self.dbs = dict() 
         self.params = {"n_jobs":4}
         self._load()
@@ -92,11 +106,16 @@ class Database(object):
             if x1 != x2:
                 e1 =  self.df[self.df["ComplexID"] == complexIdx[x1]].iloc[e1Idx]["E1"]
                 e2 =  self.df[self.df["ComplexID"] == complexIdx[x2]].iloc[e2Idx]["E2"]
-                decoyData.append({"ComplexID":"F({})".format(n),"E1":e1,"E2":e2,"E1E2":''.join(sorted([e1,e2])),"complexName":"Fake({})".format(n),"Class":0})
+                E1E2 = ''.join(sorted([e1,e2]))
+                if E1E2 not in self.df["E1E2"].values: #check if this is also reported as a positive interaction
+                    decoyData.append({"ComplexID":"F({})".format(n),"E1":e1,"E2":e2,"E1E2":E1E2,"complexName":"Fake({})".format(n),"Class":0})
 
             if n % int(nData*0.15) == 0:
                 print(round(n/nData*100,2), "%")
         
+
+
+
         df = pd.concat([self.df,pd.DataFrame(decoyData)],ignore_index=True)
         df.index = np.arange(0,df.index.size)
         boolSelfInt = df["E1"] == df["E2"]
@@ -319,7 +338,7 @@ class Database(object):
             newDBData = Parallel(n_jobs=self.params["n_jobs"],verbose=15)(delayed(self._chunkInteraction)(c) for c in chunks)
             newDBData = list(itertools.chain(*newDBData))
     
-            print("\n\nTime to macht {} interactions: {} secs".format(len(newDBData),time.time()-t1))
+            print("\n\nTime to match {} interactions: {} secs".format(len(newDBData),time.time()-t1))
 
             
             self.dfMetrices  = pd.DataFrame([x for x in newDBData if x is not None])
@@ -368,7 +387,7 @@ class Database(object):
             
             for f in requiredFiles:
 
-                data = np.load(os.path.join(pathToTmp,f),allow_pickle=True)
+                data = np.load(os.path.join(pathToTmp,"chunks",f),allow_pickle=True)
 
                 boolIdx = data[:,2] == E1E2
 

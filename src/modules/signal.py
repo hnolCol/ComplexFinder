@@ -24,10 +24,37 @@ class Signal(object):
             maxPeaks = 12, 
             savePlots = True, 
             savePeakModels = True, 
+            setMaxToOne = False,
+            smoothSignal = True,
             metrices = [], 
             pathToTmp = "", 
-            removeSingleDataPointPeaks = True):
+            removeSingleDataPointPeaks = True,
+            normalizationValue = None,
+            otherSignals = [],
+            analysisName = ""):
+        
+        """Signal module for pre-processing and modeling
 
+
+        The Signal module allows to do severl pre-processing/modelling
+        steps such as
+            a) smoothing (rolling average)
+            b) filtering by number of nonNaN values
+            c) removal of single data points (surrounded by zeros or nans)
+            b) Peak detection (finds peaks) - required for further anaylsis
+
+        The peak modelling allows for usage of `LorentzianModel` or `GaussianModel`
+
+
+
+        Note
+        ----
+        
+        Parameters
+        ----------
+        
+       
+        """
         self.Y = Y 
         self.ID = ID
         self.peakModel = peakModel
@@ -36,8 +63,18 @@ class Signal(object):
         self.metrices = metrices
         self.pathToTmp = pathToTmp
         self.savePeakModels = savePeakModels
+        self.analysisName = analysisName
+        self.setMaxToOne = setMaxToOne
+        self.normalizationValue = normalizationValue
+        self.otherSignals = otherSignals
         if removeSingleDataPointPeaks:
             self.Y = self._removeSingleDataPointPeaks()
+        if smoothSignal:
+            self.Y = self.smoothSignal()
+        if normalizationValue is not None:
+            self.Y = self.Y / normalizationValue
+        elif setMaxToOne:
+            self.Y = self._scaleToHighestToOne()
 
     def _findNaNs(self,Y):
         "Finds nans in array"
@@ -46,9 +83,14 @@ class Signal(object):
     def _getN(self,Y):
         ""
         N = int(float(Y.size * 0.025))
-        if N < 1:
-            N  = 2  
+        if N < 3:
+            N  = 3  
         return N
+
+    def _scaleToHighestToOne(self):
+        ""
+        return self.Y / np.max(self.Y)
+
 
     def _removeSingleDataPointPeaks(self):
         "Removes signal data where a peak would only be made it by one data point"
@@ -73,23 +115,21 @@ class Signal(object):
                 else:
                     flilteredY.append(x)
 
-        print(self.Y)
-        print(flilteredY)
         return np.array(flilteredY)
 
-    def isValid(self, nonNan = 4):
+    def isValid(self, nonZero = 3):
         ""
-        
-        return self._findNaNs(Y) - self.Y.size <= 4
-
+        valid = np.sum(self.Y > 0) > nonZero
+        if not valid:
+            print("Signal {} is not valid.".format(self.ID))
+        return valid
 
     def _movingAverage(self,Y,N):
         ""
 
         if N == "auto":
             N = self._getN(Y)
-           
-        return pd.Series(Y).rolling(window=N).mean().values
+        return pd.Series(Y).rolling(window=N,center=True,win_type = "boxcar").mean().fillna(0).values
 
     def smoothSignal(self,method='moving average',N="auto"):
         ""
@@ -104,7 +144,7 @@ class Signal(object):
         if cwt:
             peakDetection = sciSignal.find_peaks_cwt(self.Y,widths)
         else:
-            peakDetection, _ = sciSignal.find_peaks(self.Y)
+            peakDetection, _ = sciSignal.find_peaks(self.Y, distance = 2)
 
         return peakDetection
 
@@ -134,27 +174,27 @@ class Signal(object):
            
         self._addParam(modelParams,
                             name=prefix+'amplitude',
-                            max = self.Y[peakIdx[i]] * (np.pi**3),
-                            value = self.Y[peakIdx[i]] * 0.9,
-                            min = self.Y[peakIdx[i]] * 0.25)
+                            max = self.Y[peakIdx[i]] * 9,
+                            value = self.Y[peakIdx[i]] * 2,
+                            min = self.Y[peakIdx[i]] * 1.2)
 
         self._addParam(modelParams,
                 name=prefix+'sigma', 
-                value = 2.5,
-                min = 0.05, 
-                max = 3)
+                value = 0.255,
+                min = 0.01, 
+                max = 2.5)
 
         self._addParam(modelParams,
                 name=prefix+'center', 
                 value = peakIdx[i],
-                min = peakIdx[i] - 0.75, 
-                max = peakIdx[i] + 0.75)
+                min = peakIdx[i] - 0.2, 
+                max = peakIdx[i] + 0.2)
 
-        self._addParam(modelParams,
-                name=prefix+'height', 
-                value = self.Y[peakIdx[i]],
-                min = self.Y[peakIdx[i]] - self.Y[peakIdx[i]] * 0.05, 
-                max = self.Y[peakIdx[i]] + self.Y[peakIdx[i]] * 0.05)
+        # self._addParam(modelParams,
+        #         name=prefix+'height', 
+        #         value = self.Y[peakIdx[i]],
+        #         min = self.Y[peakIdx[i]] - self.Y[peakIdx[i]] * 0.01, 
+        #         max = self.Y[peakIdx[i]] + self.Y[peakIdx[i]] * 0.01)
 
 
     def _findParametersForModels(self,spec,peakIdx):
@@ -191,16 +231,20 @@ class Signal(object):
 
     def fitModel(self):
         ""
+        if not self.isValid():
+            return {"id":self.ID}
         peakIdx = self.findPeaks()
         peakIdx = self._checkPeakIdx(peakIdx,self.maxPeaks)
         spec = self._generateSpec(np.arange(self.Y.size) , self.Y, N = peakIdx.size)
         modelComposite, params = self._findParametersForModels(spec,peakIdx)
         if modelComposite is None:
             return {"id":self.ID}
-        
-        fitOutput = modelComposite.fit(self.Y, params, x=spec['x'])
+        fitOutput = modelComposite.fit(self.Y, params, x=spec['x'], method="powell")
+        r2 = self._calculateSquredR(fitOutput,spec)
+
         if self.savePlots or self.savePeakModels:
-            self.plotSummary(fitOutput,spec,self._calculateSquredR(fitOutput,spec),peakIdx)
+        
+            self.plotSummary(fitOutput,spec,r2,peakIdx)
         
         return {"id":self.ID,"fitOutput":fitOutput,'spec':spec,'peakIdx':peakIdx}
 
@@ -338,6 +382,7 @@ class Signal(object):
             params["sigma"] = best_values[prefix+"sigma"]
             params["height"] = self._getHeight(best_values,prefix) 
             params["fwhm"] = self._getFWHM(best_values,prefix) 
+            params["E"] = self.ID
             self.modelledPeaks.append(params)
 
         return self.modelledPeaks
@@ -369,7 +414,7 @@ class Signal(object):
     def plotSummary(self, fitOutput, spec, R, peakIdx):
         ""
         if self.savePlots:
-            fileName = "{}.pdf".format(self.ID)
+            fileName = "{}_{}.pdf".format(self.analysisName,self.ID)
             pathToPlotFolder = os.path.join(self.pathToTmp,"modelPlots")
             if not os.path.exists(pathToPlotFolder):
                 os.mkdir(pathToPlotFolder)
@@ -388,9 +433,8 @@ class Signal(object):
                                                             round(best_values[prefix+"center"],2),
                                                             round(self._getFWHM(best_values,prefix) ,3),
                                                             round(self._getHeight(best_values,prefix),3)
-                                                            )
-                                                            
-                )                                            
+                                                            )                             
+                        )                                            
 
             ax.plot(spec['x'],self.Y , color="black" , linestyle="--", linewidth=0.5)
             for peak in peakIdx:
@@ -402,7 +446,7 @@ class Signal(object):
             plt.close()
 
         if self.savePeakModels:
-            pathToTxt = os.path.join(pathToPlotFolder,"{}_r2_{}.txt".format(self.ID,round(R,3)))
+            pathToTxt = os.path.join(pathToPlotFolder,"{}_{}_r2_{}.txt".format(self.analysisName,self.ID,round(R,3)))
             with open(pathToTxt , "w") as f:
                 f.write("\t".join(["Key","ID","Amplitude","Center","Sigma","fwhm","height","auc"])+"\n")
                 for i, model in enumerate(spec['model']):

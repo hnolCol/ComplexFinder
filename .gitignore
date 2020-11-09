@@ -2,13 +2,11 @@
 __pycache__/
 *.py[cod]
 *$py.class
-
+*.DS_Store
 # pdfs
 *.pdf
 
 /src/tmp
-
-src/OUTPUT.txt
 
 # C extensions
 *.so
@@ -129,5 +127,6 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-src/SquareSorted.txt
-src/Complexes.txt
+
+example-data/old
+example-data/TMEM70

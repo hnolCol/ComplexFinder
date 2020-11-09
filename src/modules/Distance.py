@@ -12,7 +12,44 @@ import gc
 class DistanceCalculator(object):
 
     def __init__(self, Y, E2, ID, otherSignalPeaks, ownPeaks, metrices = ["apex","euclidean","pearson","p_pearson"] ,pathToTmp = '', chunkName = ''):
-        ""
+        """Signal-centric Distance Calculator.
+
+        Calculates given distance metrices of signals.
+
+        Note
+        ----
+        
+        Parameters
+        ----------
+        Y : numpy array
+            Signal profile of E1
+
+        ID : string
+            Identifier of E1
+        
+        E2 : obj:`list`of obj `np.array`
+            Signal intensity of E2s. Disntances
+            betwenn ID and E2 are calculated. 
+            The intensitiy profiles of E2s are uploaded from source.npy.
+
+        ownPeaks : obj:`list`of obj `dict`
+            List of modelled peaks for Y. Required to calculate apex distance, 
+            which is equal to the euclidean dinstance of the closest peaks. 
+        
+        metrices : obj:`list` of obj:`str` or obj`list` of obj`dict`
+            List of strings or dictionories of metrices used to calculate distance. 
+            If dict is provided, two keys namely `fn`and `name`must be provided. 
+            The name must be unique (if more than one dict is provided.)
+
+        pathToTmp : string
+            Path to the temporary folder for the current anaylsis. Required to load
+            Signals (called Ys)
+
+        chunkName : string
+            Name of the current chunk. 
+       
+        """
+
         self.Y = Y
         self.ID = ID
         self.E2s = E2
@@ -27,13 +64,43 @@ class DistanceCalculator(object):
         self.Ys = Ys[:,[n for n in range(Ys.shape[1]) if n != 0]]
 
     def _apex(self,p1,p2):
-        ""
+        """
+        Apex between two peaks. Basically euclidean distance between two peaks.
 
+        Parameters
+        ----------
+        p1 : dict
+            Peak parameters, must contain keywords: mu (center) and sigma
+
+        p2 : dict
+            Peak parameters, must contain keywords: mu (center) and sigma
+        
+
+        Returns
+        -------
+        Apex score between two peaks.
+
+        """
         return np.sqrt( (p1['mu'] - p2['mu']) ** 2  + (p1['sigma'] - p2['sigma']) ** 2 )
 
 
-    def p_pears(self,u,v):
-        "returns p value for pearson correlation"
+    def _pearson(self,u,v):
+        """
+        Calculates pearson correlation between two arrays.
+
+        Parameters
+        ----------
+        u : numpy array, array-like
+            
+
+        v : numpy array
+            
+
+        Returns
+        -------
+        Tuple of 1- pearson correlation and the p value 
+
+        """
         r, p = pearsonr(u,v)
 
         return 1-r, p
@@ -44,7 +111,7 @@ class DistanceCalculator(object):
 
     def pearson(self):
         ""
-        return [self.p_pears(self.Y,Y) for Y in self.Ys]
+        return [self._pearson(self.Y,Y) for Y in self.Ys]
        
     def apex(self,otherSignalPeaks):
         "Calculates Apex Distance"
@@ -59,11 +126,37 @@ class DistanceCalculator(object):
         return [(np.min(x),apexMinArg[n][np.argmin(x)]) for n,x in enumerate(apexDist)]
 
     def spearman(self):
+        """
+        Calculates 1 - spearman correlation for Y versus other signals.
+
+        Parameters
+        ----------
         
+
+        Returns
+        -------
+        List of 1 - rho for signals.
+
+        """
         return [1-spearmanr(Y,self.Y)[0] for Y in self.Ys]
 
     def calculateMetrices(self):
+        """
+        Calculates metrices between the signal Y and other signals Ys.
 
+        E1 and E2 denote entries. To enable parallel calculations
+        the distance calculator is entry-centric (E1) and calculates
+        the distance metrices versus all other signals (E2 and Ys)
+
+        Parameters
+        ----------
+        
+
+        Returns
+        -------
+        two dimensional numpy.array
+
+        """
         collectedDf = pd.DataFrame()
 
         collectedDf["E1"] = [self.ID] * len(self.E2s)
@@ -72,8 +165,11 @@ class DistanceCalculator(object):
         collectedDf["E1E2"] = [''.join(sorted([self.ID,E2])) for E2 in self.E2s]
         
         for metric in self.metrices:
+            
+            if isinstance(metric,dict) and callable(metric["fn"]):
+                collectedDf[metric["name"]] = [metric["fn"](self.Y,Y) for Y in self.Ys]
 
-            if metric == "pearson":
+            elif metric == "pearson":
                 collectedDf["pearson"], collectedDf["p_pearson"] = zip(*self.pearson())
 
             elif metric == "spearman":
@@ -93,6 +189,8 @@ class DistanceCalculator(object):
                 maxOwnY = np.argmax(self.Y)
                 collectedDf["max_location"] = [np.abs(np.argmax(Y)-maxOwnY) for Y in self.Ys]
 
+           
+
         gc.collect()
         if "apex_peakId" in collectedDf.columns:
             
@@ -102,16 +200,7 @@ class DistanceCalculator(object):
             collectedDf = collectedDf[firstCols + columnsResorted]
 
         return collectedDf.values
-            #collectedDf.to_csv(pathToFile, index=False)
 
-
-if __name__ == "__main__":
-    X = np.array([
-        [1,4],
-        [3,4],
-        [4,3]
-    ])
-    print(DistanceCalculator(X).apex(X))
 
 
 

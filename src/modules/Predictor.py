@@ -18,6 +18,8 @@ from scipy.spatial.distance import squareform
 from sklearn.preprocessing import MinMaxScaler
 from collections import OrderedDict
 from joblib import Parallel, delayed, dump, load
+import umap
+import hdbscan 
 
 def chunks(l, n):
     """Yield successive n-sized chunks from l."""
@@ -194,7 +196,7 @@ class Classifier(object):
 class ComplexBuilder(object):
 
 
-    def __init__(self,method="OPTICS"):
+    def __init__(self,method="HDBSCAN"):
         ""
         if method == "OPTICS":
             self.clustering = OPTICS(min_samples=2,metric="precomputed", n_jobs=4)
@@ -202,7 +204,8 @@ class ComplexBuilder(object):
             self.clustering = AgglomerativeClustering(affinity="precomputed")
         elif method == "AFFINITY_PROPAGATION":
             self.clustering = AffinityPropagation(affinity="precomputed")
-
+        elif method == "HDBSCAN":
+            self.clustering = hdbscan.HDBSCAN(min_cluster_size=2)
         self.method = method
 
     def set_params(self, params):
@@ -214,6 +217,12 @@ class ComplexBuilder(object):
         ""
       #  print("Generate Square Matrix ..")
         X, labels = self._makeSquareMatrix(X, metricColumns, scaler, inv,  poolMethod)
+        print(X)
+        print("SQUAR MATRIX")
+        
+
+        embed = umap.UMAP(metric="precomputed", min_dist=0.00001, n_neighbors=4).fit_transform(X)
+
       #  print("done .. - starting clustering")
         if self.method == "OPTICS":
             clusterLabels = self.clustering.fit_predict(X)
@@ -221,7 +230,9 @@ class ComplexBuilder(object):
         elif self.method in ["AGGLOMERATIVE_CLUSTERING","AFFINITY_PROPAGATION"]:
             clusterResult = self.clustering.fit_predict(X)
             return clusterResult, labels, X, ["None"] * labels.size, ["None"] * labels.size
-        
+        elif self.method == "HDBSCAN":
+            clusterResult = self.clustering.fit(embed)
+            return clusterResult.labels_ , labels, X, clusterResult.probabilities_, ["None"] * labels.size, embed
         
     def _makeSquareMatrix(self, X, metricColumns, scaler, inv,  poolMethod):
         import time
@@ -235,7 +246,6 @@ class ComplexBuilder(object):
                 X["meanDistance"] = scaler(X[metricColumns]).mean(axis=1)
             elif poolMethod == "min":
                 X["meanDistance"] = scaler(X[metricColumns]).min(axis=1)
-            
 
         if inv:
             X['meanDistance'] = 1 - X['meanDistance']

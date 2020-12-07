@@ -61,7 +61,7 @@ RF_GRID_SEARCH = {#'bootstrap': [True, False],
 OPTICS_PARAM_GRID = {"min_samples":[2,3,5,8], "max_eps": [np.inf,2,1,0.9,0.8], "xi": np.linspace(0,0.3,num=30), "cluster_method" : ["xi"]}
 AGGLO_PARAM_GRID = {"n_clusters":[None,115,110,105,100,90,95],"distance_threshold":[None,0.5,0.4,0.2,0.1,0.05,0.01], "linkage":["complete","single","average"]}
 AFF_PRO_PARAM = {"damping":np.linspace(0.5,1,num=50)}
-HDBSCAN_PROPS = {"min_cluster_size":[3,4],"min_samples":[3,4,5,8,10]}
+HDBSCAN_PROPS = {"min_cluster_size":[3,4,5,8,12],"min_samples":[1,8,10,15,20]}
 CLUSTER_PARAMS = {"OPTICS":OPTICS_PARAM_GRID,"AGGLOMERATIVE_CLUSTERING":AGGLO_PARAM_GRID,"AFFINITY_PROPAGATION":AFF_PRO_PARAM,"HDBSCAN":HDBSCAN_PROPS}
 
 param_grid = {'C': [1, 10, 100, 1000], 'kernel': ['linear','rbf','poly'], 'gamma': [0.01,0.1,1,2,3,4,5]}
@@ -117,7 +117,7 @@ class ComplexFinder(object):
                 maxPeaksPerSignal = 15,
                 maxPeakCenterDifference = 1.8,
                 n_jobs = 12,
-                classifierTestSize = 0.25,
+                classifierTestSize = 0.2,
                 binaryDatabase = False,
                 noDatabaseForPredictions = False,
                 useRawDataForDimensionalReduction = False,
@@ -129,16 +129,16 @@ class ComplexFinder(object):
                 minDistanceBetweenTwoPeaks = 3,
                 analysisName = None,
                 idColumn = "Uniprot ID",
-                databaseFileName = "20190823_CORUM.txt",#humap2.txt",#s"humap2.txt",#
+                databaseFileName = "20190823_CORUM.txt",#s"humap2.txt",#
                 peakModel = "GaussianModel",#"SkewedGaussianModel",#"LorentzianModel",
                 imputeNaN = True,
                 smoothSignal = True,
                 classifierClass = "GaussianNB",# "random_forest",
-                grouping = {"WT2": ["D3_WT_03.txt","D3_WT_04.txt"],"WT1":["D3_WT_01.txt","D3_WT_02.txt"],"KO":["D3_KO_01.txt","D3_KO_02.txt"]},#"WT":["D2_WT_02.txt","D2_WT_01.txt"],"KO":["D2_CLPP_KO_02.txt","D2_CLPP_KO_01.txt"]},#{"D0": ["D0_aebersold.txt"]},#{"Interphase" : ["D1_interphase.txt"],"Mitosis" : ["D1_mitosis.txt"]},#"WT2": ["D3_WT_03.txt","D3_WT_04.txt"],"WT1":["D3_WT_01.txt","D3_WT_02.txt"],"KO":["D3_KO_01.txt","D3_KO_02.txt"]},#"Interphase" : ["D1_interphase.txt"],"Mitosis" : ["D1_mitosis.txt"]},#"WT2": ["D3_WT_03.txt","D3_WT_04.txt"],"WT1":["D3_WT_01.txt","D3_WT_02.txt"],"KO":["D3_KO_01.txt","D3_KO_02.txt"]},#,#{"WT2": ["D3_WT_03.txt","D3_WT_04.txt"],"WT1":["D3_WT_01.txt","D3_WT_02.txt"],"KO":["D3_KO_01.txt","D3_KO_02.txt"]}, #"Interphase" : ["D1_interphase.txt"],"Mitosis" : ["D1_mitosis.txt"]},#,#  },#"WT2": ["D3_WT_03.txt","D3_WT_04.txt"]{"WT":["D2_WT_01.txt","D2_WT_02.txt"],"KO":["D2_CLPP_KO_01.txt","D2_CLPP_KO_02.txt"]},#,
+                grouping = {"KO": ["D3_KO_01.txt","D3_KO_01.txt"], "WT" : ["D3_WT_01.txt","D3_WT_02.txt","D3_WT_03.txt","D3_WT_04.txt"]},
                 analysisMode = "label-free", #replicate #[label-free,SILAC,SILAC-TMT]
                 retrainClassifier = False,
                 interactionProbabCutoff = 0.7,
-                databaseFilter = {'Organism': ["Human"]},#{"Confidence" : [1,2,3]},#, #,#{
+                databaseFilter = {'Organism': ["Human"]}, #{"Confidence" : [1,2,3]},#
                 databaseIDColumn = "subunits(UniProt IDs)",#"Uniprot_ACCs",#
                 databaseHasComplexAnnotations = True,
                 normValueDict = {},
@@ -151,8 +151,7 @@ class ComplexFinder(object):
                 runName = None,
                 metricQuantileCutoff = 0.90,
                 recalculateDistance = False,
-                decoySizeFactor = 2.5,
-                considerOnlyInteractionsPresentInAllRuns = 3):
+                decoySizeFactor = 2.5):
         """
         Init ComplexFinder Class
 
@@ -211,8 +210,7 @@ class ComplexFinder(object):
             "minDistanceBetweenTwoPeaks" : minDistanceBetweenTwoPeaks,
             "plotComplexProfiles" : plotComplexProfiles,
             "decoySizeFactor" : decoySizeFactor,
-            "classifierTestSize" : classifierTestSize,
-            "considerOnlyInteractionsPresentInAllRuns" : considerOnlyInteractionsPresentInAllRuns
+            "classifierTestSize" : classifierTestSize
             }
         print("\n" + str(self.params))
         self._checkParameterInput()
@@ -343,7 +341,7 @@ class ComplexFinder(object):
 
         for entryID, signal in self.X.iterrows():
 
-            self.Signals[self.currentAnalysisName][entryID] = Signal(signal.values,
+            self.Signals[self.analysisName][entryID] = Signal(signal.values,
                                             ID=entryID, 
                                             peakModel=peakModel, 
                                             smoothSignal = self.params["smoothSignal"],
@@ -420,7 +418,7 @@ class ComplexFinder(object):
             with open(os.path.join(self.params["pathToComb"], "entriesInChunk.pkl"),"wb") as f:
                         pickle.dump(entriesInChunks,f)
 
-        print("Distance computing/checking: {} secs\n".format(round(time.time()-t1)))
+        print("Distance computing: {} secs\n".format(round(time.time()-t1)))
 
     def _createSignalChunks(self,chunkSize = 30):
         """
@@ -451,7 +449,7 @@ class ComplexFinder(object):
         for analysisName in self.params["analysisName"]:
             print("Info :: {} signal chunk creation started." .format(analysisName))
             if "umap-dist" in self.params["metrices"]:
-                embed = umap.UMAP(min_dist=0.0000000000001, n_neighbors=5, metric = "correlation", random_state=56).fit_transform(minMaxNorm(self.Xs[analysisName].values,axis=1))
+                embed = umap.UMAP(min_dist=0.0000000000001, n_neighbors=5, metric = "correlation").fit_transform(minMaxNorm(self.Xs[analysisName].values,axis=1))
                 embed = pd.DataFrame(embed,index=self.Xs[analysisName].index)
 
             signals = list(self.Signals[analysisName].values())
@@ -480,6 +478,7 @@ class ComplexFinder(object):
                 with open(pathToChunk,"wb") as f:
                     pickle.dump(chunkItems,f)
                 
+                gc.collect()
                 c.append(pathToChunk)
             
             self.signalChunks[analysisName] = c
@@ -562,29 +561,23 @@ class ComplexFinder(object):
             return
 
         print("Info :: Load positive set from data base")
-        if not hasattr(self,"DB"):
-            self.DB = Database(nJobs = self.params["n_jobs"])
-
-        pathToDatabase = os.path.join(self.params["pathToComb"], "InteractionDatabase.txt")
+        self.DB = Database(nJobs = self.params["n_jobs"])
+        pathToDatabase = os.path.join(self.params["pathToTmp"][self.currentAnalysisName], "InteractionDatabase.txt")
         if os.path.exists(pathToDatabase):
 
             dbSize = self.DB.loadDatabaseFromFile(pathToDatabase)
             print("Info :: Database found and loaded. Contains {} positive interactions.".format(dbSize))
-           # self._addMetricToStats("nPositiveInteractions",dbSize)
+            self._addMetricToStats("nPositiveInteractions",dbSize)
         else:
             
             self.DB.pariwiseProteinInteractions(
                             self.params["databaseIDColumn"],
                             dbID = self.params["databaseFileName"],
                             filterDb=self.params["databaseFilter"])
-
-            entryList = []
-            for analysisName in self.params["analysisName"]:
-                entryList.extend([entryID for entryID,Signal in self.Signals[analysisName].items() if Signal.valid])
-            entryList = np.unique(np.array(entryList).flatten())
+            entryList = [entryID for entryID,Signal in self.Signals[self.currentAnalysisName].items() if Signal.valid]
             print("Info :: Entries used for filtering: {}".format(len(entryList)))
             dbSize = self.DB.filterDBByEntryList(entryList)
-           # self._addMetricToStats("nPositiveInteractions",dbSize)
+            self._addMetricToStats("nPositiveInteractions",dbSize)
             #add decoy to db
             if dbSize == 0:
                 raise ValueError("Warning :: No hits found in database. Check dabaseFilter keyword.")
@@ -598,7 +591,7 @@ class ComplexFinder(object):
             self.DB.df.to_csv(pathToDatabase,sep="\t")
             print("Info :: Database saved to {}".format(pathToDatabase))
 
-    def _addMetricesToDB(self,analysisName):
+    def _addMetricesToDB(self):
         """
         Adds distance metrices to the database entries
         that were found in the co-elution profiles.
@@ -613,7 +606,7 @@ class ComplexFinder(object):
         """
         metricColumns = self.params["metrices"] 
         if not self.params["noDatabaseForPredictions"]:
-            self.DB.matchMetrices(self.params["pathToTmp"][analysisName],entriesInChunks[analysisName],metricColumns,analysisName,forceRematch=False)
+            self.DB.matchMetrices(self.params["pathToTmp"][self.currentAnalysisName],entriesInChunks[self.currentAnalysisName],metricColumns,forceRematch=False)
 
 
     def _trainPredictor(self):
@@ -635,29 +628,24 @@ class ComplexFinder(object):
             print("Predictor training skipped (noDatabaseForPredictions = True). Distance metrices are used for dimensional reduction.")
             return 
 
-        folderToResults = [os.path.join(self.params["pathToTmp"][analysisName],"result") for analysisName in self.params["analysisName"]]
-        classifierFileName = os.path.join(self.params["pathToComb"],'trainedClassifier_{}.sav'.format(self.params["classifierClass"]))
+        folderToResults = os.path.join(self.params["pathToTmp"][self.currentAnalysisName],"result")
+        classifierFileName = os.path.join(self.params["pathToTmp"][self.currentAnalysisName],'trainedClassifier_{}.sav'.format(self.params["classifierClass"]))
 
         if not self.params["retrainClassifier"] and os.path.exists(classifierFileName): #enumerate(
             print("Info :: Prediction was done already... loading file")
             self.classifier = joblib.load(classifierFileName)
             return
 
-        # f not os.path.exists(folderToResults):
-        #     os.mkdir(folderToResults)i
+        if not os.path.exists(folderToResults):
+            os.mkdir(folderToResults)
         
        # if self.params["metricesForPrediction"] is None:
         metricColumnsForPrediction = self.params["metrices"]
        # else:
           #  metricColumnsForPrediction = self.params["metricesForPrediction"]
 
-        totalColumns = metricColumnsForPrediction + ['Class',"E1E2"] 
-        
-        data = [self.DB.dfMetrices[analysisName][totalColumns].dropna(subset=metricColumnsForPrediction) for analysisName in self.params["analysisName"]]
-        data = pd.concat(data, ignore_index=True)
-        dataForTraining = data[["E1E2"] + metricColumnsForPrediction]
-        print("Info :: Merging database metrices.")
-        dataForTraining = dataForTraining.groupby(dataForTraining['E1E2']).aggregate("mean")
+        totalColumns = metricColumnsForPrediction + ['Class']
+        data = self.DB.dfMetrices[totalColumns].dropna(subset=metricColumnsForPrediction)
         Y = data['Class'].values
         X = data.loc[:,metricColumnsForPrediction].values
 
@@ -667,14 +655,16 @@ class ComplexFinder(object):
             gridSearch = self.params["classiferGridSearch"],
             testSize = self.params["classifierTestSize"])
 
-        probabilites, meanAuc, stdAuc, oobScore, optParams, Y_test, Y_pred = self.classifier.fit(X,Y,kFold=self.params["kFold"],pathToResults=self.params["pathToComb"], metricColumns = metricColumnsForPrediction)
-    
+        probabilites, meanAuc, stdAuc, oobScore, optParams = self.classifier.fit(X,Y,kFold=self.params["kFold"],pathToResults=folderToResults, metricColumns = metricColumnsForPrediction)
+       
+        boolClass = probabilites > self.params["interactionProbabCutoff"]
+
         data["PredictionClass"] = probabilites
-        pathToFImport = os.path.join(self.params["pathTocomb"],"PredictorSummary{}.txt".format(self.params["metrices"]))
+        pathToFImport = os.path.join(self.params["pathToTmp"][self.currentAnalysisName],"result","PredictorSummary(p>{}){}.txt".format(self.params["interactionProbabCutoff"],self.params["metrices"]))
         #create and save classification report
         classReport = classification_report(
-                            Y_test,
-                            Y_pred,
+                            Y,
+                            boolClass,
                             digits=3,
                             output_dict=True)
         classReport = OrderedDict([(k,v) for k,v in classReport.items() if k != 'accuracy'])
@@ -682,9 +672,9 @@ class ComplexFinder(object):
         pd.DataFrame().from_dict(classReport, orient="index").to_csv(pathToFImport, sep="\t", index=True)
 
         #save database prediction
-        data.to_csv(os.path.join(self.params["pathToComb"],"DBpred.txt"),sep="\t", index=False)
+        data.to_csv(os.path.join(self.params["pathToTmp"][self.currentAnalysisName],"DBpred.txt"),sep="\t", index=False)
         
-        self._plotFeatureImportance(self.params["pathToComb"])
+        self._plotFeatureImportance(folderToResults)
 
         joblib.dump(self.classifier, classifierFileName)
         self._addMetricToStats("Metrices",str(metricColumnsForPrediction))
@@ -772,9 +762,12 @@ class ComplexFinder(object):
 
         predInteractions = None                                     
          
-        metricIdx = [n + 4 if "apex" in self.params["metrices"] else n + 3 for n in range(len(self.params["metrices"]))] #in order to extract from dinstances, apex creates an extra column (apex_dist)
+        metricIdx = [n + 4 if "apex" in self.params["metrices"] else n + 3 for n in range(len(self.params["metrices"]))] #in order to extract from dinstances
+        #print("metric idx", metricIdx)
+        #print(self.params["metrices"])
         
 
+        #classProba = Parallel(n_jobs=self.params["n_jobs"], verbose=10)(delayed(self.classifier.predict)(X[:,metricIdx].astype(np.float32)) for X,pathToChunk,nChunks in self._loadPairsForPrediction())
         for n,(X,nChunks) in enumerate(self._loadPairsForPrediction()):
             boolSelfIntIdx = X[:,0] == X[:,1] 
             print(round(n/nChunks*100,2),r"% done.")
@@ -839,7 +832,7 @@ class ComplexFinder(object):
         d["ComplexID"], d["ComplexName"] = zip(*[self._attachComplexID(_bool,E1E2) for E1E2, _bool in zip(predInteractions[:,2], boolDbMatch)])
 
         d = self._attachPeakIDtoEntries(d)
-        d.to_csv(pathToPrediction, sep="\t", index=False)
+        d.to_csv(pathToPrediction, sep="\t")
 
         
 
@@ -970,7 +963,7 @@ class ComplexFinder(object):
         return complexDf , np.nanmean(scores)  #np.unique(complexDf["Cluster Labels"]).size - 
 
 
-    def _clusterInteractions(self, predInts, clusterMethod = "HDBSCAN", plotEmbedding = True, groupFiles = [], combineProbs = True, groupName = ""):
+    def _clusterInteractions(self, predInts, clusterMethod = "HDBSCAN", plotEmbedding = True):
         """
         Performs dimensional reduction and clustering of prediction distancen matrix over a defined parameter grid.
         Parameter
@@ -994,7 +987,7 @@ class ComplexFinder(object):
         if predInts is None:
             print("No database provided. UMAP and clustering will be performed using defaultKwargs. (noDatabaseForPredictions = True)")
 
-        pathToFolder = self._makeFolder(self.params["pathToComb"],"complexIdentification")
+        pathToFolder = self._makeFolder(self.params["pathToTmp"][self.currentAnalysisName],"result","complexParamGrid")
 
         if not self.params["databaseHasComplexAnnotations"] and not self.params["noDatabaseForPredictions"] and predInts is not None:
             print("Database does not contain complex annotations. Therefore standard UMAP settings are HDBSCAN settings are used for complex identification.")
@@ -1070,21 +1063,15 @@ class ComplexFinder(object):
 
         else:
             embedd = None
-            if len(groupFiles) > 0:
-                groupMetricColumns = ["Prob_0_({})".format(analysisName) for analysisName in groupFiles] 
-               # print(groupMetricColumns)
-
-            predInts = predInts[groupMetricColumns + ["E1","E2","E1E2"]]
-            predInts.dropna(subset=groupMetricColumns,inplace=True)
             for n, params in enumerate(list(ParameterGrid(CLUSTER_PARAMS[clusterMethod]))):
                 try:
                     cb.set_params(params)
                     if clusterMethod == "HDBSCAN":
                         clusterLabels, intLabels, matrix , reachability, core_distances, embedd, pooledDistances = cb.fit(predInts, 
-                                                                                            metricColumns = groupMetricColumns,#,#[colName for colName in predInts.columns if "Prob_" in colName], 
+                                                                                            metricColumns = [colName for colName in predInts.columns if "Prob_" in colName],#,#[colName for colName in predInts.columns if "Prob_" in colName], 
                                                                                             scaler = None,#self.classifier._scaleFeatures, #
-                                                                                            inv = True, # after pooling by poolMethod, invert (1-X)
-                                                                                            poolMethod="mean",
+                                                                                            inv = True,
+                                                                                            poolMethod="min",
                                                                                             preCompEmbedding = None,
                                                                                             )
                     else:
@@ -1097,7 +1084,7 @@ class ComplexFinder(object):
                     print("\nWarning :: There was an error performing clustering and dimensional reduction, using the params:\n" + str(params))
                     continue
                 df = pd.DataFrame().from_dict({"Entry":intLabels,"Cluster Labels":clusterLabels,"reachability":reachability,"core_distances":core_distances})
-                df = df.sort_values(by=["Cluster Labels","reachability"])
+                df = df.sort_values(by="Cluster Labels")
                 df = df.set_index("Entry")
 
 
@@ -1106,14 +1093,14 @@ class ComplexFinder(object):
                 
             # df = df.join(assignedIDs[["ComplexID"]])
                 if True:#maxScore > score:
-                    df.to_csv(os.path.join( pathToFolder,"Complexes:{}_{}_{}.txt".format(groupName,n,score)),sep="\t") 
+                    df.to_csv(os.path.join( pathToFolder,"Complexes_{}_{}.txt".format(n,score)),sep="\t") 
                     print("Info :: Current best params ... ")
                     print(params)
                     squaredDf = pd.DataFrame(matrix,columns=intLabels,index=intLabels).loc[df.index,df.index]
-                    squaredDf.to_csv(os.path.join(pathToFolder,"SquaredSorted{}_{}.txt".format(groupName,n)),sep="\t")
+                    squaredDf.to_csv(os.path.join(pathToFolder,"SquaredSorted_{}.txt".format(n)),sep="\t")
 
                     noNoiseIndex = df.index[df["Cluster Labels"] > 0]
-                    squaredDf.loc[noNoiseIndex,noNoiseIndex].to_csv(os.path.join(pathToFolder,"NoNoiseSquaredSorted_{}_{}.txt".format(groupName,n)),sep="\t")
+                    squaredDf.loc[noNoiseIndex,noNoiseIndex].to_csv(os.path.join(pathToFolder,"NoNoiseSquaredSorted_{}_{}.txt".format(self.currentAnalysisName,n)),sep="\t")
                     maxScore = score
                     bestDf = df
                     self._plotComplexProfiles(bestDf, pathToFolder, str(n))
@@ -1128,12 +1115,12 @@ class ComplexFinder(object):
                     dfEmbed = dfEmbed.set_index("Entry")
                     dfEmbed.loc[dfEmbed.index,"ComplexID"] = df["ComplexID"].loc[dfEmbed.index]
                     dfEmbed = dfEmbed.join(self.Xs[self.currentAnalysisName])
-                    dfEmbed.to_csv(os.path.join(pathToFolder,"UMAP_Embeding_{}_{}_{}.txt".format(n,params,groupName)),sep="\t")
+                    dfEmbed.to_csv(os.path.join(pathToFolder,"UMAP_Embeding_{}_{}.txt".format(n,params)),sep="\t")
                     
                     #plot embedding.
                     fig, ax = plt.subplots()
                     ax.scatter(embedd["UMAP_0"].values, embedd["UMAP_1"].values,s=50, c=clusterLabels, cmap='Spectral')
-                    plt.savefig(os.path.join(pathToFolder,"UMAP_Embedding_{}_n{}.pdf".format(groupName,n)))
+                    plt.savefig(os.path.join(pathToFolder,"E_n{}.pdf".format(n)))
                     plt.close()
 
                 recordScore[n] = {"score":score,"params":params}
@@ -1298,7 +1285,7 @@ class ComplexFinder(object):
 
         date = datetime.today().strftime('%Y-%m-%d')
         runName = self.params["runName"] if self.params["runName"] is not None else self._randomStr(3)
-        self.params["pathToComb"] = self._makeFolder(pathToTmp,"{}_{}runs".format(runName,len(self.params["analysisName"])))
+        self.params["pathToComb"] = self._makeFolder(pathToTmp,"{}_{}_{}runs".format(date,runName,len(self.params["analysisName"])))
         print("Folder create in which combined results will be saved: " + self.params["pathToComb"])
         pathToTmpFolder = os.path.join(self.params["pathToComb"],analysisName)
         if os.path.exists(pathToTmpFolder):
@@ -1382,9 +1369,7 @@ class ComplexFinder(object):
         statColumns = ["nInteractions ({})".format(self.params["interactionProbabCutoff"]),"nPositiveInteractions","OOB_Score","ROC_Curve_AUC","Metrices","Classifier","ClassifierParams"]
         self.stats = pd.DataFrame(index = self.params["analysisName"],columns = statColumns)
         
-        self.params["runTimes"] = {}
-        self.params["runTimes"]["StartTime"] = time.time() 
-
+        
         for n,X in enumerate(X):
             
            # entriesInChunks.clear()
@@ -1408,61 +1393,33 @@ class ComplexFinder(object):
                 self._findPeaks(self.params["n_jobs"])
                 self._collectRSquaredAndFitDetails()
                 self._saveSignalFitStatistics()
-
-        
+       
         
 
         self._combinePeakResults()
         self._saveSignals()
-        endSignalTime = time.time()
-        self.params["runTimes"]["SignalFitting&Comparision"] = time.time() - self.params["runTimes"]["StartTime"]
+        self._createSignalChunks()
+        
         
         print("Peak modeling done. Starting with distance calculations and predictions (if enabled)..")
-        self._createSignalChunks()
         for n,X in enumerate(X):
             if n < len(self.params["analysisName"]):
                 self.currentAnalysisName = self.params["analysisName"][n]
                 print(self.currentAnalysisName," :: Starting distance calculations.")
 
                 self._calculateDistance()
+                self._loadReferenceDB()
+                self._addMetricesToDB()
+                self._trainPredictor()
+                predInts = self._predictInteractions()
+            #predInts = None
+                self._clusterInteractions(predInts)
 
-        self.params["runTimes"]["Distance Calculation"] = time.time() - endSignalTime
-        distEndTime = time.time()
-        self._loadReferenceDB()
-
-        for analysisName in self.params["analysisName"]:
-            self._addMetricesToDB(analysisName)
-        dataPrepEndTime = time.time()
-        self.params["runTimes"]["Database Preparation"] = dataPrepEndTime - distEndTime
         
-        self._trainPredictor()
-
-        for analysisName in self.params["analysisName"]:
-            
-            self.currentAnalysisName = analysisName
-            predInts = self._predictInteractions()
-            #
-        
-        #save statistics
         self.stats.to_csv(os.path.join(self.params["pathToComb"],"statistics.txt"),sep="\t")
-        #combine interactions
-        combinedInteractions = self._combineInteractionsAndClusters()
-        endTrainingTime = time.time()
-        self.params["runTimes"]["Classifier Training & Prediction"] = endTrainingTime - dataPrepEndTime
-        
-
-        for groupName,groupFileNames in self.params["grouping"].items():
-
-            self._clusterInteractions(combinedInteractions,groupFiles = groupFileNames,groupName = groupName)
-
-        self.params["runTimes"]["Interaction Clustering and Embedding"] = time.time() - endTrainingTime
-        print(self.params["runTimes"])
-        pd.DataFrame().from_dict(self.params["runTimes"],orient="index").to_csv(os.path.join(self.params["pathToComb"],"runTimes.txt"),sep="\t")
-
+        self._combineInteractionsAndClusters()
     def _combinePredictedInteractions(self, pathToComb):
         ""
-        pathToInteractions = os.path.join(pathToComb,"combinedInteractions.txt")
-       
         print("Info :: Combining interactions of runs.")
         preditctedInteractions = []
         for analysisName in self.params["analysisName"]:
@@ -1471,7 +1428,7 @@ class ComplexFinder(object):
             pathToPrediction = os.path.join(pathToResults,"predictedInteractions{}_{}.txt".format(self.params["metricesForPrediction"],self.params["classifierClass"]))
 
             if os.path.exists(pathToPrediction):
-                preditctedInteractions.append(pd.read_csv(pathToPrediction,sep="\t").set_index(["E1E2","E1","E2"]))
+                preditctedInteractions.append(pd.read_csv(pathToPrediction,sep="\t").set_index(["E1E2","E1","E2"],drop=False))
             else:
                 raise ValueError("Warning :: PredictedInteractions not found. " + str(pathToPrediction))
 
@@ -1482,6 +1439,7 @@ class ComplexFinder(object):
                 combResults = df 
                 combResults.columns = ["{}_({})".format(colName,analysisName) for colName in df.columns]
                 combResults[analysisName]  = pd.Series(["+"]*df.index.size, index = df.index)
+                
             else:
 
                 df.columns = ["{}_({})".format(colName,analysisName) for colName in df.columns] 
@@ -1489,41 +1447,26 @@ class ComplexFinder(object):
                 df[analysisName]  = pd.Series(["+"]*df.index.size, index = df.index)
                # combResults["validSignal({})".format(analysisName)]  = df[["E1_({})".format(analysisName),"E2_({})".format(analysisName)]].apply(lambda x: all(e in self.Signals[analysisName] and self.Signals[analysisName][e].valid for e in x.values),axis=1)
                 combResults = combResults.join(df, how="outer")
-
         combResults = combResults.reset_index()
-
         for analysisName in self.params["analysisName"]:
-        
-            combResults["validSignalFit({})".format(analysisName)]  = combResults[["E1","E2"]].apply(lambda x: all(e in self.Signals[analysisName] and self.Signals[analysisName][e].valid for e in x.values),axis=1)
-        combResults["#Valid Signal Fit"]  = combResults[["validSignalFit({})".format(analysisName) for analysisName in self.params["analysisName"]]].sum(axis=1)
+            
+
+            combResults["validSignal({})".format(analysisName)]  = combResults[["E1","E2"]].apply(lambda x: all(e in self.Signals[analysisName] and self.Signals[analysisName][e].valid for e in x.values),axis=1)
+        combResults["Valid in"]  = combResults[["validSignal({})".format(analysisName) for analysisName in self.params["analysisName"]]].sum(axis=1)
         
         detectedColumn = [analysisName for analysisName in self.params["analysisName"]]
-        #detected in grouping
-        for groupName,groupItems in self.params["grouping"].items():
-            boolIdx = combResults[groupItems] == "+"
-            combResults["Complete in {}".format(groupName)] = np.sum(boolIdx,axis=1) == len(groupItems)
-
         boolIdx = combResults[detectedColumn] == "+"
-        combResults["# Detected in"] = np.sum(boolIdx,axis=1)
-        combResults.sort_values(by="# Detected in", ascending = False, inplace = True)
-        
-        combResults.to_csv(pathToInteractions,sep="\t",index=True)
-        interactionsInAllSamples = self.params["considerOnlyInteractionsPresentInAllRuns"]
-        if isinstance(interactionsInAllSamples,bool) and interactionsInAllSamples:
-            combResults = combResults[combResults["# Detected in"]] == len(self.params["analysisName"])
-        elif isinstance(interactionsInAllSamples,int):
-            if interactionsInAllSamples > len(self.params["analysisName"]):
-                interactionsInAllSamples = len(self.params["analysisName"])
-            combResults = combResults.loc[combResults["# Detected in"] >= interactionsInAllSamples]
-
-        return combResults
+        combResults["Detected in"] = np.sum(boolIdx,axis=1)
+        combResults.sort_values(by="Detected in", ascending = False, inplace = True)
+        combResults.to_csv(os.path.join(pathToComb,"combinedInteractions.txt"),sep="\t",index=True)
+            
 
 
     def _combineInteractionsAndClusters(self):
         ""
         pathToComb = self.params["pathToComb"]
-        combinedInteractions = self._combinePredictedInteractions(pathToComb)
-        return combinedInteractions
+        self._combinePredictedInteractions(pathToComb)
+
         # for analysisName in self.params["analysisName"]:
 
         #     pathToTmp = self.params["pathToTmp"][analysisName]
@@ -1662,9 +1605,9 @@ class ComplexFinder(object):
             alignRuns = False
         fittedPeaksData = []
         suffixedColumns = []
-        for analysisName in self.params["analysisName"]:
+        for analysisName in self.analysisNames:
             suffixedColumns.extend(["{}_{}".format(colName,analysisName) for colName in columnsForPeakFit])
-            tmpFolder = self.params["pathToTmp"][analysisName]#os.path.join(".","tmp",analysisName)
+            tmpFolder = os.path.join(".","tmp",analysisName)
             resultsFolder = os.path.join(tmpFolder,"result")
             fittedPeaks = os.path.join(resultsFolder,"fittedPeaks.txt")
             if os.path.exists(fittedPeaks):
@@ -1689,15 +1632,16 @@ class ComplexFinder(object):
                 for n,df in enumerate(filteredData):
                     
                     if df.empty:
+                        
                         continue
                     if n == 0:
-                        df.columns = [colName if colName == "Key" else "{}_{}".format(colName,self.params["analysisName"][n]) for colName in df.columns.values.tolist()]
+                        df.columns = [colName if colName == "Key" else "{}_{}".format(colName,self.analysisNames[n]) for colName in df.columns.values.tolist()]
                         d = d.append(df)
                     else:
                         meanCenters = d[[colName for colName in d.columns if "Center" in colName]].mean(axis=1)
                         idx = meanCenters.index
                         if idx.size == 0:
-                            df.columns = [colName if colName == "Key" else "{}_{}".format(colName,self.params["analysisName"][n]) for colName in df.columns.values.tolist()]
+                            df.columns = [colName if colName == "Key" else "{}_{}".format(colName,self.analysisNames[n]) for colName in df.columns.values.tolist()]
                             d = d.append(df)
                             continue
                         newIdx = []
@@ -1709,14 +1653,15 @@ class ComplexFinder(object):
                                 newIdx.append(idx[peaksInRange].values[0])
                         
                         df.index = newIdx
-                        df.columns = [colName if colName == "Key" else "{}_{}".format(colName,self.params["analysisName"][n]) for colName in df.columns.values.tolist()]
-                        targetColumns = [colName for colName in df.columns if self.params["analysisName"][n] in colName]
+                        df.columns = [colName if colName == "Key" else "{}_{}".format(colName,self.analysisNames[n]) for colName in df.columns.values.tolist()]
+                        targetColumns = [colName for colName in df.columns if self.analysisNames[n] in colName]
                         d = pd.merge(d,df[targetColumns], how="outer",left_index=True,right_index=True)
                        
                         d["Key"] = [uniqueKey] * d.index.size
 
-                concatDataFrames.append(d)
+           
 
+                concatDataFrames.append(d)
             if len(concatDataFrames) == 0 or all(X.empty for X in concatDataFrames):
                 print("Warning - no matching keys found. Aborting.")
                 return
@@ -1724,36 +1669,29 @@ class ComplexFinder(object):
             #peakPropColumns = [col for col in data.columns if col.split("_")[0] in columnsForPeakFit]
             
             data.sort_index(axis=1, inplace=True)
-            print(data)
+
             #perform t-test
             grouping = self.params["grouping"]
-            if len(grouping) > 1:
-                groups = list(self.params["grouping"].keys())  
-                print(groups)          
-                groupComps =  list(combinations(groups,2))
-                print(groupComps)
-                resultColumnNames = ["t({})_({})".format(group1,group0) for group0,group1 in groupComps]
-                for n,(group0, group1) in enumerate(groupComps):
-                    print("Comparing {} vs {}".format(group0,group1))
-                    sampleNames1 = grouping[group0] #get file names for group
-                    sampleNames2 = grouping[group1] #get file names for group
-                    columnNames1 = ["auc_{}".format(sampleName) for sampleName in sampleNames1]
-                    columnNames2 = ["auc_{}".format(sampleName) for sampleName in sampleNames2]
-                    X = np.log2(data[columnNames1].replace(0,np.nan).values)
-                    Y = np.log2(data[columnNames2].replace(0,np.nan).values)
-                    data[["log2({})".format(colName) for colName in columnNames1]] = X
-                    data[["log2({})".format(colName) for colName in columnNames2]] = Y
-                    if len(columnNames1) > 1 and len(columnNames2) > 1:
-                        t, p = ttest_ind(X,Y,axis=1,nan_policy="omit",equal_var = True)
-                    
-                        data["-log10-p-value:({})".format(resultColumnNames[n])] = np.log10(p) * (-1)
-                        data["T-stat:({})".format(resultColumnNames[n])] = t
-                        data["diff:({})".format(resultColumnNames[n])] = np.nanmean(Y,axis=1) - np.nanmean(X,axis=1) 
-                    elif len(columnNames1) == 1 or len(columnNames2) == 1:
-                        data["diff:({})".format(resultColumnNames[n])] = np.nanmean(Y,axis=1) - np.nanmean(X,axis=1) 
+            groups = list(self.params["grouping"].keys())            
+            groupComps =  combinations(groups,2)
+            print(groupComps)
+            resultColumnNames = ["t({})_({})".format(group1,group0) for group0,group1 in groupComps]
+            for n,(group0, group1) in enumerate(groupComps):
+                sampleNames1 = grouping[group0]
+                sampleNames2 = grouping[group1]
+                columnNames1 = ["auc_{}".format(sanmpleName) for sanmpleName in sampleNames1]
+                columnNames2 = ["auc_{}".format(sanmpleName) for sanmpleName in sampleNames2]
+                X = data[columnNames1].values
+                Y = data[columnNames2].values
+               
+                t, p = ttest_ind(X,Y,axis=1,nan_policy="omit",equal_var = True)
+                
+                data["-log10-p-value:({})".format(resultColumnNames[n])] = np.log10(p) * (-1)
+                data["T-stat:({})".format(resultColumnNames[n])] = t
+                data["diff:({})".format(resultColumnNames[n])] = np.nanmean(Y,axis=1) - np.nanmean(X,axis=1) 
 
 
-            data.to_csv(txtOutput,sep="\t",index=False)
+            data.to_csv(txtOutput,sep="\t")
         else:
             data = pd.read_csv(txtOutput,sep="\t")
 
@@ -1783,7 +1721,7 @@ if __name__ == "__main__":
   #  X
 
    # ComplexFinder(indexIsID=False,analysisName="500restoreTry",classiferGridSearch=param_grid, classifierClass="SVM").run(X)""
-    ComplexFinder(restartAnalysis = False,recalculateDistance  = False, runName = "D3_CORUM_25", indexIsID=False,classifierClass="random forest",retrainClassifier=True,interactionProbabCutoff = 0.75,removeSingleDataPointPeaks=True, smoothSignal=True).run("../example-data/TMEM70/")#[X,Y])
+    ComplexFinder(restartAnalysis = False,recalculateDistance  = False, runName = "D3_5xDecoy", indexIsID=False,classifierClass="random forest",retrainClassifier=False,interactionProbabCutoff = 0.66,removeSingleDataPointPeaks=True, smoothSignal=True).run("../example-data/TMEM70/")#[X,Y])
 
 
 

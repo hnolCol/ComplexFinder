@@ -11,7 +11,17 @@ import gc
 
 class DistanceCalculator(object):
 
-    def __init__(self, Y, E2, ID, otherSignalPeaks, ownPeaks, metrices = ["apex","euclidean","pearson","p_pearson"] ,pathToTmp = '', chunkName = ''):
+    def __init__(self, 
+                    Y, 
+                    E2, 
+                    ID, 
+                    otherSignalPeaks, 
+                    ownPeaks, 
+                    metrices = ["apex","euclidean","pearson","p_pearson"] ,
+                    pathToTmp = '', 
+                    chunkName = '', 
+                    embedding = [], 
+                    otherSignalEmbeddings = []):
         """Signal-centric Distance Calculator.
 
         Calculates given distance metrices of signals.
@@ -56,7 +66,10 @@ class DistanceCalculator(object):
         self.ownPeaks = ownPeaks
         self.metrices = metrices
         self.otherSignalPeaks = otherSignalPeaks
+        #print(self.otherSignalPeaks)
         self.pathToTmp = pathToTmp
+        self.embedding = embedding
+        self.otherSignalEmbeddings = otherSignalEmbeddings
 
         Ys = np.load(os.path.join(pathToTmp,"source.npy"),allow_pickle=True)
         boolIdx = np.isin(Ys[:,0],E2)
@@ -81,7 +94,7 @@ class DistanceCalculator(object):
         Apex score between two peaks.
 
         """
-        
+
         return np.sqrt( (p1['mu'] - p2['mu']) ** 2  + (p1['sigma'] - p2['sigma']) ** 2 )
 
 
@@ -170,7 +183,7 @@ class DistanceCalculator(object):
             if isinstance(metric,dict) and callable(metric["fn"]):
                 collectedDf[metric["name"]] = [metric["fn"](self.Y,Y) for Y in self.Ys]
 
-            elif metric == "pearson":
+            elif (metric == "pearson" or metric == "p_pearson") and "pearson" not in collectedDf.columns:
                 collectedDf["pearson"], collectedDf["p_pearson"] = zip(*self.pearson())
 
             elif metric == "spearman":
@@ -190,15 +203,19 @@ class DistanceCalculator(object):
                 maxOwnY = np.argmax(self.Y)
                 collectedDf["max_location"] = [np.abs(np.argmax(Y)-maxOwnY) for Y in self.Ys]
 
-           
-
-        gc.collect()
+            elif metric == "umap-dist" and len(self.embedding) == 2:
+                xa, ya = self.embedding
+                collectedDf["umap-dist"] = [np.sqrt((xa - xb)**2 + (ya-yb)**2) for xb,yb in self.otherSignalEmbeddings] 
+                
         if "apex_peakId" in collectedDf.columns:
             
             firstCols = ["E1","E2","E1E2","apex_peakId"]
-            columnsResorted = [col for col in collectedDf.columns if col not in firstCols]
+            columnsResorted = self.metrices
+        else:
+            firstCols = ["E1","E2","E1E2"] 
+            columnsResorted = self.metrices
 
-            collectedDf = collectedDf[firstCols + columnsResorted]
+        collectedDf = collectedDf[firstCols + columnsResorted]
 
         return collectedDf.values
 

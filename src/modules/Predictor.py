@@ -8,6 +8,10 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import roc_curve, auc
 from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit
+from sklearn.naive_bayes import GaussianNB
+from sklearn.model_selection import train_test_split
+
+from imblearn.ensemble import BalancedRandomForestClassifier
 import numpy as np
 import pandas as pd
 from scipy import interp
@@ -21,19 +25,35 @@ from joblib import Parallel, delayed, dump, load
 import umap
 import hdbscan 
 
+
+
 def chunks(l, n):
-    """Yield successive n-sized chunks from l."""
+    """
+    Iterator for chunks of numpy array (row wise). 
+
+    Parameters
+    ----------
+    l : two-dimensional array
+        Array which should be separated into chunks
+    n : int
+        Number of chunks
+    
+    Returns
+    -------
+    Numpy array chunk 
+
+    """
     for i in range(0, len(l), n):
         yield l[i:i + n]
 
+
 class Classifier(object):
     
-    def __init__(self, classifierClass = "random forest", n_jobs = 4, gridSearch = None):
+    def __init__(self, classifierClass = "random forest", n_jobs = 4, gridSearch = None, testSize = 0.25):
         """Classifier module for prediction of positive / negative feature interaction
 
         Note
         ----
-
 
         
         Parameters
@@ -47,24 +67,71 @@ class Classifier(object):
 
         """
 
-        self.gridSerach = gridSearch
+        self.gridSerach = gridSearch if classifierClass != "GaussianNB" else None
         self.n_jobs = n_jobs
         self.classifierClass = classifierClass
+        self.testSize = testSize
+        
         self.classifier = self._initClassifier()
 
 
     def _initClassifier(self):
-        ""
+        """
+        Initiate Classifer
+
+        Parameters
+        ----------
+    
+    
+        Returns
+        -------
+        Init Classifier
+
+
+        Raises
+        ------
+        ValueError if class argument `classifierClass` unknown.
+
+        """
         if self.classifierClass in ["random_forest","random forest","ensemble tree"]:
             return RandomForestClassifier(n_estimators=200,
-                                            oob_score=True,
-                                            min_samples_split=2,
-                                            n_jobs=self.n_jobs)
+                                        oob_score=True,
+                                        min_samples_split=2,
+                                        n_jobs=self.n_jobs)
+                                                        
+                                # RandomForestClassifier(n_estimators=200,BalancedRandomForestClassifier
+                                #             oob_score=True,
+                                #             min_samples_split=2,
+                                #             n_jobs=self.n_jobs)
         elif self.classifierClass == "SVM":
             
             return SVC(gamma=2, C=1, probability=True)
 
+        elif self.classifierClass == "GaussianNB":
+
+            return GaussianNB()
+
+        else:
+            raise ValueError("Argument `classifierClass` is not known.")
+
     def _scaleFeatures(self,X):
+        """
+        Feature scaling. Data are scaled by StandardScaler (0-1)
+
+        Importantly, the scaler is not retrained once it was initiated
+        to ensure that the scaling remains similiar for predictors.
+
+        Parameters
+        ----------
+        X : two dimensional numpy array (feature paris in rows)
+            Distance matrix for feature pairs
+    
+    
+        Returns
+        -------
+        Scaled data of same dimension as X.
+
+        """
         if not hasattr(self,"Scaler"):
             self.Scaler = StandardScaler()
             return self.Scaler.fit_transform(X)
@@ -73,19 +140,36 @@ class Classifier(object):
         
 
     def _gridOptimization(self,X,Y):
+        """
+        Classifier optimization based on grid search.
 
+        Parameters
+        ----------
+        X : two dimensional numpy array (feature paris in rows)
+            Distance matrix for feature pairs
+        Y : numpy array 
+            Array containing class labels of X (0,1)
+    
+        Returns
+        -------
+        Best estimator found by the grid search.
+
+        """
         gridSearch = GridSearchCV(self.classifier, 
                                     scoring = "f1", 
                                     param_grid = self.gridSerach, 
                                     n_jobs = self.n_jobs, 
-                                    cv = 8, 
-                                    verbose=4)
+                                    cv = 5, 
+                                    verbose=2,
+                                    refit = True)
 
         gridSearch.fit(X,Y)
 
-        self.bestClassifier = gridSearch.best_estimator_
+        print("Info :: The maximal F1 Score was found to be: {}".format(gridSearch.best_score_))
 
-        return gridSearch.best_params_
+       # self.bestClassifier = gridSearch.best_estimator_
+
+        return gridSearch.best_estimator_, gridSearch.best_params_
 
 
     def getFeatureImportance(self):
@@ -104,31 +188,50 @@ class Classifier(object):
         
 
         if hasattr(self.predictors[0],"feature_importances_"):
-            return self.predictors[0].feature_importances_
+            return np.array([pred.feature_importances_ for pred in self.predictors])
 
 
     def predict(self,X,scale=True):
-        ""
+        """
+        Predict class of interaction using predictors. 
+
+        Parameters
+        ----------
+        X : two dimensional numpy array
+            Distance matrix for feature pairs
+       scale : bool. Defaults to True.
+            Scales data if true. Importantly,
+            the scaler is not retrained using the X. 
+            The scaler fit is performed when classifier
+            is trained. 
+
+        Returns
+        -------
+        Two dimensional array (n feature pairs x predictors) 
+        containing the class proability 
+        if predictors (default: 3 - see fit function)
+
+        """
         probas_ = None
         if hasattr(self,"predictors"):
             if scale:
                 try:
                     X = self._scaleFeatures(X)
                 except Exception as e:
-                    print("scale failed")
-                    print(e)
-                    return
+                    raise ValueError("There was a problem in scaling the data. {}".format(e))
             for p in self.predictors:
                 if probas_ is None:
                     probas_ = p.predict_proba(X)
                 else:
                     probas_ = np.append(probas_,p.predict_proba(X), axis=1)
-
-           # resultClass = np.mean(probas_[:,1::2],axis=1)
-            resultClass = probas_[:,1::2]
+            if probas_.shape[1] == 2:
+                resultClass = probas_[:,1] 
+            else:
+                resultClass = probas_[:,1::2]
+           
             return resultClass
 
-    def fit(self, X, Y, kFold = 3, optimizedParams=None, pathToResults = '', plotROCCurve = True):
+    def fit(self, X, Y, kFold = 3, optimizedParams=None, pathToResults = '', plotROCCurve = True, metricColumns = []):
         """
         Runs grid search estimator optimization
 
@@ -139,6 +242,8 @@ class Classifier(object):
         Y : np.array
             Class labels (1 - 0) for postive 
             and negative interaction
+        kFold : int
+            Number of cross validations. Equals the number of predictors.
         optimizedParams: dict or None
             Already optimized parameters set to the classifier.
         pathToResults : str
@@ -147,63 +252,71 @@ class Classifier(object):
             If True a pdf will be created showing the ROC curve of 
             trained classifier with individual k-fold line
 
-
         Returns
         -------
         Array of feature importances (sum = 1)
 
         """
-        print("predictor training started")
+        print("Info :: Predictor training started")
         X = self._scaleFeatures(X)
+        #pd.DataFrame(X).to_csv("SCALED_FEATURES.txt")
+
+
+        X_train, X_test, y_train, y_test = train_test_split(X,Y,stratify=Y,test_size=self.testSize)
 
         rocCurveData = OrderedDict()
        # xTrain, xTest, yTrain, yTest = train_test_split(X,Y,test_size=0.2)
 
         if self.gridSerach is not None and optimizedParams is None:
-            optimizedParams = self._gridOptimization(X,Y)
+            optimizedClassifier, optimizedParams = self._gridOptimization(X_train,y_train)
+        else:
+            print("Info :: Grid serach skipped. Automatically skipped when using Guassian NB or parameter 'classiferGridSearch' is None.")
 
         #cv = StratifiedShuffleSplit(n_splits=10, test_size=0.2)
         if optimizedParams is not None:
-            print("Optimized parameters")
+            print("Info : Optimized parameters")
             print(optimizedParams)
-        cv = StratifiedKFold(n_splits=kFold, shuffle=True)
-        self.predictors = []
+        
+        
+        self.predictors = [optimizedClassifier]
+        probasOut = optimizedClassifier.predict_proba(X) 
+        #predict probabiliteis for complete data set to create a classfier report.
         tprs = []
         aucs = []
+        oobScore = np.nan
         mean_fpr = np.linspace(0, 1, 100)
         fig, ax = plt.subplots()
         i=0
-        probasOut = None
-        for train, test in cv.split(X, Y):
-            classifier_ = self._initClassifier()
-            if optimizedParams is not None:
-                classifier_.set_params(**optimizedParams)
+        
+        #for train, test in [()]
+       
+        #probasOut = classifier_.predict_proba(X)
+        # if optimizedParams is not None:
+        #     classifier_.set_params(**optimizedParams)
+        
 
-            classifier_.fit(X[train], Y[train])
-            probas_ = classifier_.predict_proba(X[test])
-            self.predictors.append(classifier_)
+        # classifier_.fit(X[train], Y[train])
+        probas_ = optimizedClassifier.predict_proba(X_test)
+        
 
-            if hasattr(classifier_,"feature_importances_"):
-                print("Feature Importance")
-                print(classifier_.feature_importances_)
+        fpr, tpr, _ = roc_curve(y_test, probas_[:, 1])
+        rocCurveData["FPR_{}".format(i)] = fpr
+        rocCurveData["TPR_{}".format(i)] = tpr
+        tprs.append(interp(mean_fpr, fpr, tpr))
+        tprs[-1][0] = 0.0
+        roc_auc = auc(fpr, tpr)
+        aucs.append(roc_auc)
+        ax.plot(fpr, tpr, lw=1, alpha=0.3,
+                label='ROC fold %d (AUC = %0.2f)' % (i, roc_auc))
+        i+=1
 
-            fpr, tpr, thresholds = roc_curve(Y[test], probas_[:, 1])
-            rocCurveData["FPR_{}".format(i)] = fpr
-            rocCurveData["TPR_{}".format(i)] = tpr
-            tprs.append(interp(mean_fpr, fpr, tpr))
-            tprs[-1][0] = 0.0
-            roc_auc = auc(fpr, tpr)
-            aucs.append(roc_auc)
-            ax.plot(fpr, tpr, lw=1, alpha=0.3,
-                    label='ROC fold %d (AUC = %0.2f)' % (i, roc_auc))
-            i+=1
+    
+        if len(self.predictors) == 1:
+            oobScore = np.mean([optimizedClassifier.oob_score_ for classifier in self.predictors])
+        else:
+            oobScore = optimizedClassifier.oob_score_
 
-            if probasOut is None: 
-                    probasOut = classifier_.predict_proba(X)
-            else:
-                    probasOut = np.append(probasOut_,classifier_.predict_proba(X), axis=1)
-
-        print("predictor training done")
+        print("Info :: Predictor {} training done.".format(self.classifierClass))
         if plotROCCurve:
             #plotting
             ax.plot(    [0, 1], 
@@ -233,13 +346,33 @@ class Classifier(object):
                 aucFile = "ROC curve.pdf"
 
             plt.savefig(aucFile)
+        else:
+            mean_auc = np.nan
+            std_auc = np.nan
         
         # save ROC cure data
-        meanProbsOut = self.saveToROCCurveData(rocCurveData,probasOut, pathToResults)
-        return meanProbsOut
+        self.saveToROCCurveData(rocCurveData, pathToResults, metricColumns)
 
-    def saveToROCCurveData(self,rocCurveData, probasOut, pathToResults):
-        ""
+        return probasOut[:,1], mean_auc, std_auc, oobScore, str(optimizedClassifier.get_params()), y_test, optimizedClassifier.predict(X_test)
+
+    def saveToROCCurveData(self,rocCurveData, pathToResults,metricColumns):
+        """
+        Saves ROC curve data (FPR, TPR) in txt file.
+
+        Parameters
+        ----------
+        rocCurveData : dict.
+            k : `FPR_i` and `TPR_i` 
+            v : FPR and TPR values, array
+            
+        pathToResults : str
+            path to which the txt file should be saved.
+        
+        Returns
+        -------
+        None. 
+
+        """
         maxValues = np.max([x.size for x in rocCurveData.values()])
         rocData = pd.DataFrame()
         for k,v in rocCurveData.items():
@@ -248,11 +381,10 @@ class Classifier(object):
                 fill = np.full(diff, np.nan)
                 v = np.concatenate([v,fill])
             rocData[k] = v
-            
 
-        rocData.to_csv(os.path.join(pathToResults,"rocCurveData.txt"),sep="\t")
+        rocData.to_csv(os.path.join(pathToResults,"rocCurveData{}_{}.txt".format(str(metricColumns),self.classifierClass)),sep="\t")
 
-        return np.mean(probasOut[:,1::2],axis=1)
+        
 
 
 class ComplexBuilder(object):
@@ -275,15 +407,25 @@ class ComplexBuilder(object):
         self.clustering.set_params(**params) 
 
 
-    def fit(self, X, metricColumns, scaler = None, inv = False, poolMethod="min"):
+    def fit(self, X, metricColumns, scaler = None, inv = False, poolMethod="min", umapKwargs = {"min_dist":1e-7,"n_neighbors":4,"random_state":350}, generateSquareMatrix = True, preCompEmbedding = None, useSquareMatrixForCluster = False):
         ""
-      #  print("Generate Square Matrix ..")
-        X, labels = self._makeSquareMatrix(X, metricColumns, scaler, inv,  poolMethod)
-        print(X)
-        print("SQUAR MATRIX")
-        
-
-        embed = umap.UMAP(metric="precomputed", min_dist=0.00001, n_neighbors=4).fit_transform(X)
+        if X is not None and generateSquareMatrix and preCompEmbedding is None:
+        #  print("Generate Square Matrix ..")
+           # print(scaler)
+            X, labels, pooledDistances = self._makeSquareMatrix(X, metricColumns, scaler, inv,  poolMethod)
+           # print(X)
+            print("Info :: Umap calculations started.")
+            embed = umap.UMAP(metric="precomputed", **umapKwargs).fit_transform(X)
+        elif preCompEmbedding is not None:
+            embed = preCompEmbedding.values
+            labels = preCompEmbedding.index.values
+            pooledDistances = None
+        elif not generateSquareMatrix:
+            labels = X.index.values
+                
+            embed = umap.UMAP(**umapKwargs).fit_transform(X)
+        else:
+            raise ValueError("X and alternativeData are both None. No data for UMAP.")
 
       #  print("done .. - starting clustering")
         if self.method == "OPTICS":
@@ -293,52 +435,49 @@ class ComplexBuilder(object):
             clusterResult = self.clustering.fit_predict(X)
             return clusterResult, labels, X, ["None"] * labels.size, ["None"] * labels.size
         elif self.method == "HDBSCAN":
-            clusterResult = self.clustering.fit(embed)
-            return clusterResult.labels_ , labels, X, clusterResult.probabilities_, ["None"] * labels.size, embed
+            if useSquareMatrixForCluster:
+                self.set_params({"metric":"precomputed"})
+                clusterResult = self.clustering.fit(X)
+            else:
+                clusterResult = self.clustering.fit(embed)
+           # self.clustering.condensed_tree_.to_pandas()
+            return clusterResult.labels_ , labels, X, clusterResult.probabilities_, ["None"] * labels.size, embed, pooledDistances
         
     def _makeSquareMatrix(self, X, metricColumns, scaler, inv,  poolMethod):
         import time
         if scaler is None:
             if poolMethod == "mean":
                 X["meanDistance"] = X[metricColumns].mean(axis=1)
+            elif poolMethod == "max":
+                X["meanDistance"] = X[metricColumns].max(axis=1)
             elif poolMethod == "min":
                 X["meanDistance"] = X[metricColumns].min(axis=1)
         else:
             if poolMethod == "mean":
                 X["meanDistance"] = scaler(X[metricColumns]).mean(axis=1)
+            elif poolMethod == "max":
+                X["meanDistance"] = scaler(X[metricColumns]).max(axis=1)
             elif poolMethod == "min":
                 X["meanDistance"] = scaler(X[metricColumns]).min(axis=1)
-
+            
         if inv:
             X['meanDistance'] = 1 - X['meanDistance']
 
-        uniqueValues = np.unique(X[["E1p","E2p"]])
+        uniqueValues = np.unique(X[["E1","E2"]])
+        uniqueVDict = dict([(value,n) for n,value in enumerate(uniqueValues)])
         nCols = nRows = uniqueValues.size 
-        print("Creating {} x {} distance matrix".format(nCols,nCols))
-        matrix = np.full(shape=(nRows,nCols), fill_value = 3.0)
-
-       # print(nCols, "is the number of columns in square matrix\nwhich correpsonds to the number of proteins for which a protein-protein interaction was found.")
+        print("Info :: Creating {} x {} distance matrix".format(nCols,nCols))
+        matrix = np.full(shape=(nRows,nCols), fill_value = 2.0 if scaler is not None else 1.0)
         
-        t1 = time.time()
-
-        for row in X[["E1p","E2p","meanDistance"]].values:
+        for row in X[["E1","E2","meanDistance"]].values:
             
-            nRow = np.where(uniqueValues == row[0])
-            nCol = np.where(uniqueValues == row[1])
+            nRow = uniqueVDict[row[0]]
+            nCol = uniqueVDict[row[1]]
+            
             matrix[[nRow,nCol],[nCol,nRow]] = row[2]
-       
-        matrix = (matrix - np.min(matrix)) / (np.max(matrix) - np.min(matrix))
+        if scaler is not None:
+            matrix = (matrix - np.min(matrix)) / (np.max(matrix) - np.min(matrix))
         np.fill_diagonal(matrix,0)
         
-        return matrix, uniqueValues
-
-    def evaluateClusters(self):
-        "checks for false positives?"
-
-
-    def optimizeClustering(self):
-        ""
-    
-
-if __name__ == "__main__":
-    print("PREDCITOR TEST")
+        
+        return matrix, uniqueValues, X

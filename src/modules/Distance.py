@@ -21,6 +21,7 @@ class DistanceCalculator(object):
                     pathToTmp = '', 
                     chunkName = '', 
                     embedding = [], 
+                    Ys = None,
                     otherSignalEmbeddings = []):
         """Signal-centric Distance Calculator.
 
@@ -206,14 +207,14 @@ class DistanceCalculator(object):
             elif metric == "umap-dist" and len(self.embedding) == 2:
                 xa, ya = self.embedding
                 collectedDf["umap-dist"] = [np.sqrt((xa - xb)**2 + (ya-yb)**2) for xb,yb in self.otherSignalEmbeddings] 
-                
+        
+        columnsResorted = [metricName if not isinstance(metricName,dict) else metricName["name"] for metricName in self.metrices]
         if "apex_peakId" in collectedDf.columns:
             
             firstCols = ["E1","E2","E1E2","apex_peakId"]
-            columnsResorted = self.metrices
+            
         else:
             firstCols = ["E1","E2","E1E2"] 
-            columnsResorted = self.metrices
 
         collectedDf = collectedDf[firstCols + columnsResorted]
 

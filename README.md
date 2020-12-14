@@ -20,9 +20,10 @@ As a next step, we want to identify clusters. To this end, we are using the inte
 random forest classifier. To this end, we are calculating the UMAP embedding and apply HDBSCAN clustering. Again, we 
 are using the CORUM database to quantify the the clustering result. Both techniques, UMAP and HDBSCAN are performed 
 using a paramter grid to cycle through different options and find the best clustering. 
-The rating of the clustering takes into account, the number of correct protein-protein interactions (defined by CORUM database), the total number of protein-protein interactions (basically the amount of noise found by HDBSCAN). The size of a cluster is not considered in the clustering score calculation. 
+The rating of the clustering takes into account, the number of correct protein-protein interactions (defined by CORUM database), the total number of protein-protein interactions (basically the amount of noise found by HDBSCAN). 
 
- ![Cluster identifiation](/img/workflow.png)
+ ![Quantification](/img/quantDetails.png)
+
 
 ## Installation
 
@@ -130,12 +131,19 @@ Sklearn library is used for predictions. Please check the comprehensive [documen
  * *I get the Error message: no positive hits found in database. What does it mean?*
 
  Please check the class argument databaseFilter of type dict. For example the default is 
- ```
+ ```python
  databaseFilter = {'Organism': ["Human"]}
 ```
 This means that the database is filtered on column 'Organism' using "Human" as the search string.  
 
-* *How can I change the peak model*
+* *How can I change the positive database?*
+
+The required format for the database is a tab-delimited txt file. The file must contain the columns: ComplexID and ComplexName. 
+Additionally, the pipeline requires a column with the feature IDs (same ID as in the provided co-elution/migration data) of a complex divided by a ";". 
+Easiest might be to check the provided databases in the folder *reference-data*. 
+If you want to use ComplexFinder without a database, check out the FAQ (*How to run the pipeline without a database?*) below.
+
+* *How can I change the peak model?*
 
 The peak built in models are from the package [lmfit](https://lmfit.github.io/lmfit-py/builtin_models.html). 
 ```python
@@ -148,8 +156,8 @@ model = getattr(models, basis_func['type'])(prefix=prefix)
 ```
 
 Therofore, you can provide any string that matches a model name in the lmfit package. Please note that, only peak parameters and constraints 
-are implemented and tested for Gaussian, Lorentzian and Skewed Gaussian. So if your fit does not work, you may want to check out the
-fucntion 
+are implemented and tested for Gaussian, Lorentzian and Skewed Gaussian. So if your fit does not work, you may want to check the following
+function of the *Signal.py* class module.
 
 ```python
 def _addParams(self,modelParams,prefix,peakIdx,i):
@@ -203,6 +211,8 @@ Please not that you also have to alter the functions *_getHeight* and *_getFWHM*
 You can check the equations [here](http://openafox.com/science/peak-function-derivations.html).
 
 
+
+
  # Future Directions
 
 In the future, we would like to implement the following features:
@@ -241,12 +251,16 @@ The following python packages are required to run the scripts (from the requirem
 * umap-learn==0.4.6
 * uncertainties==3.1.4
 
+# Citation/Publication
 
+If you found usage of this piepline helpful, please consider citation of the following paper. We highly appreciate any acknowledgement. 
+
+Info on publication status: Paper submitted.
 
 # Contact 
 
-Of note, please use the Issue functionality in GitHub to report bugs.
-Nevertheless, you can contact us if you have any question or requests for a feature via [e-mail](mailto:h.nolte@age.mpg.de?subject=ComplexFinder%20Request). 
+Of note, please use the Issue GitHub functionality of this repository to report bugs.
+Nevertheless, you can contact us if you have any question or requests for a feature functions of the pipeline via [e-mail](mailto:h.nolte@age.mpg.de?subject=ComplexFinder%20Request). 
 
 
  

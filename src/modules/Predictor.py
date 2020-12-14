@@ -462,6 +462,8 @@ class ComplexBuilder(object):
             
         if inv:
             X['meanDistance'] = 1 - X['meanDistance']
+        
+        X = X.dropna(subset=["meanDistance"])
 
         uniqueValues = np.unique(X[["E1","E2"]])
         uniqueVDict = dict([(value,n) for n,value in enumerate(uniqueValues)])

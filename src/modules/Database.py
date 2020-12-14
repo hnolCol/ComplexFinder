@@ -302,7 +302,14 @@ class Database(object):
         ""
         fileName = dbName.replace('.txt','')
         for k,v in filterDb.items():
-            fileName = fileName + "_{}_".format(k) + '_'.join(str(v))
+            if isinstance(v,str):
+                vStr = v 
+            elif isinstance(v,list):
+                vStr = ";".join([str(x) for x in v])
+            else:
+                vStr = str(v)
+
+            fileName = fileName + "_{}_".format(k) + '_' + vStr
         return fileName + '.txt'
 
     def _saveFilteredDf(self,fileName):

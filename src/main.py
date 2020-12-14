@@ -13,7 +13,7 @@ from datetime import datetime
 from modules.Signal import Signal
 from modules.Database import Database
 from modules.Predictor import Classifier, ComplexBuilder
-from modules.utils import * 
+from modules.utils import calculateDistanceP, chunks, cleanPath, minMaxNorm
 
 import joblib
 from joblib import Parallel, delayed, dump, load
@@ -44,7 +44,6 @@ from scipy.stats import ttest_ind
 import umap
 
 
-
 __VERSION__ = "0.2.24"
 
 filePath = os.path.dirname(os.path.realpath(__file__)) 
@@ -60,17 +59,17 @@ RF_GRID_SEARCH = {
                 'n_estimators': [400]
                 }
 
-# RF_GRID_SEARCH = {#'bootstrap': [True, False],
-#  'max_depth': [None],#30,50,
-#  'max_features': ['auto'],
-#  'min_samples_leaf': [2],
-#  'min_samples_split': [4,5],
-#  'n_estimators': [200]}
+
 OPTICS_PARAM_GRID = {"min_samples":[2,3,5,8], "max_eps": [np.inf,2,1,0.9,0.8], "xi": np.linspace(0,0.3,num=30), "cluster_method" : ["xi"]}
 AGGLO_PARAM_GRID = {"n_clusters":[None,115,110,105,100,90,95],"distance_threshold":[None,0.5,0.4,0.2,0.1,0.05,0.01], "linkage":["complete","single","average"]}
 AFF_PRO_PARAM = {"damping":np.linspace(0.5,1,num=50)}
-HDBSCAN_PROPS = {"min_cluster_size":[3,4],"min_samples":[3,4,5,8,10]}
-CLUSTER_PARAMS = {"OPTICS":OPTICS_PARAM_GRID,"AGGLOMERATIVE_CLUSTERING":AGGLO_PARAM_GRID,"AFFINITY_PROPAGATION":AFF_PRO_PARAM,"HDBSCAN":HDBSCAN_PROPS}
+HDBSCAN_PROPS = {"min_cluster_size":[2,3,4,6],"min_samples":[2,3,4,5,8,10]}
+CLUSTER_PARAMS = {
+                    "OPTICS":OPTICS_PARAM_GRID,
+                    "AGGLOMERATIVE_CLUSTERING":AGGLO_PARAM_GRID,
+                    "AFFINITY_PROPAGATION":AFF_PRO_PARAM,
+                    "HDBSCAN":HDBSCAN_PROPS
+                }
 
 param_grid = {'C': [1, 10, 100, 1000], 'kernel': ['linear','rbf','poly'], 'gamma': [0.01,0.1,1,2,3,4,5]}
 
@@ -84,7 +83,7 @@ class ComplexFinder(object):
                 alignMethod = "RadiusNeighborsRegressor",#"RadiusNeighborsRegressor",#"KNeighborsRegressor",#"LinearRegression", # RadiusNeighborsRegressor
                 alignRuns = False,
                 alignWindow = 3,
-                analysisMode = "label-free", #replicate #[label-free,SILAC,SILAC-TMT]
+                analysisMode = "label-free", #[label-free,SILAC,SILAC-TMT]
                 analysisName = None,
                 binaryDatabase = False,
                 classifierClass = "random_forest",
@@ -93,7 +92,7 @@ class ComplexFinder(object):
                 considerOnlyInteractionsPresentInAllRuns = 2,
                 databaseFilter = {'Organism': ["Human"]},#{"Confidence" : [1,2,3,4]} - for hu.map2.0,
                 databaseIDColumn = "subunits(UniProt IDs)",
-                databaseFileName = "20190823_CORUM.txt",#"humap2.txt",#s"humap2.txt",#2#
+                databaseFileName = "20190823_CORUM.txt",#"humap2.txt
                 databaseHasComplexAnnotations = True,
                 decoySizeFactor = 1.2,
                 grouping = {"WT": ["D3_WT_04.txt","D3_WT_02.txt"],"KO":["D3_KO_01.txt","D3_KO_02.txt"]},
@@ -188,18 +187,107 @@ class ComplexFinder(object):
             "decoySizeFactor" : decoySizeFactor,
             "classifierTestSize" : classifierTestSize,
             "considerOnlyInteractionsPresentInAllRuns" : considerOnlyInteractionsPresentInAllRuns,
-            "precision" : precision
+            "precision" : precision,
+            "quantFiles" : quantFiles
             }
         print("\n" + str(self.params))
         self._checkParameterInput()
+    
+    def _addMetricesToDB(self,analysisName):
+        """
+        Adds distance metrices to the database entries
+        that were found in the co-elution profiles.
+
+        Parameters
+        ----------
+    
+        Returns
+        -------
+        None
+
+        """
+        metricColumns = self.params["metrices"] 
+        if not self.params["noDatabaseForPredictions"]:
+            self.DB.matchMetrices(self.params["pathToTmp"][analysisName],entriesInChunks[analysisName],metricColumns,analysisName,forceRematch=False)
+
+
+    def _addMetricToStats(self,metricName, value):
+        """
+        Adds a metric to the stats data frame.
+        Does not check if metric is represent, if present,
+        it will just overwrite.
+
+        Parameters
+        ----------
+
+        metricName str
+            Name of metric to add
+
+        value str
+            Value of metric
+    
+        Returns
+        -------
+        None
+
+        """
+        if metricName in self.stats.columns:
+            self.stats.loc[self.currentAnalysisName,metricName] = value
+
+    def _addModelToSignals(self,signalModels):
+        """
+        Adds fitted models to Signals. If not a valid
+        model was found, then the signal profile is removed.
+
+        Parameters
+        ----------
+        signalModels - list
+            List of modelfits (dict)
+
+        Returns
+        -------
+        None
+
+        """
+        for fitModel in signalModels:
+            modelID = fitModel["id"]
+            if len(fitModel) == 1:
+                del self.Signals[self.currentAnalysisName][modelID]
+            if modelID in self.Signals[self.currentAnalysisName]:
+                for k,v in fitModel.items():
+                    if k != 'id':
+                       # print(self.Signals[self.currentAnalysisName][modelID])
+                        setattr(self.Signals[self.currentAnalysisName][modelID],k,v)
+                self.Signals[self.currentAnalysisName][modelID].saveResults()
+
+    def _attachQuantificationDetails(self):
+        """
+        """
+
 
     def _checkParameterInput(self):
-        ""
+        """
+        Checks the input.
+
+        Parameters
+        ----------
+    
+        Returns
+        -------
+        None
+
+        Raises
+        -------
+        ValueErrors if datatype if given parameters do not match. 
+
+        """
 
         #check anaylsis mode
         validModes = ["label-free","SILAC","TMT-SILAC"]
         if self.params["analysisMode"] not in validModes:
             raise ValueError("Parmaeter analysis mode is not valid. Must be one of: {}".format(validModes))
+        elif self.params["analysisMode"] != "label-free" and len(self.params["quantFiles"]) == 0:
+            raise ValueError("Length 'quantFiles must be at least 1.")
 
         if not isinstance(self.params["maxPeaksPerSignal"],int):
             raise ValueError("maxPeaksPerSignal must be an integer. Current setting: {}".forma(self.params["maxPeaksPerSignal"]))
@@ -213,8 +301,8 @@ class ComplexFinder(object):
         #r2 validation
         if not isinstance(self.params["r2Thresh"],float):
             raise ValueError("Parameter r2Trehsh mus be a floating number.")
-        elif self.params["r2Thresh"] < 0.6:
-            print("Warning :: threshold for r2 is set below 0.6. This might result in fits of poor quality")
+        elif self.params["r2Thresh"] < 0.5:
+            print("Warning :: threshold for r2 is set below 0.5. This might result in fits of poor quality")
         elif self.params["r2Thresh"] > 0.95:
             print("Warning :: threshold for r2 is above 0.95. Relatively few features might pass this limit.")
         elif self.params["r2Thresh"] > 0.99:
@@ -241,9 +329,62 @@ class ComplexFinder(object):
                     raise ValueError("All metrices given in 'metricesForPrediction' must be present in 'metrices'.")
         else:
             self.params["metricesForPrediction"] = self.params["metrices"]
+        
+    
+    def _chunkPrediction(self,pathToChunk,classifier,nMetrices,probCutoff):
+        """
+        Predicts for each chunk the proability for positive interactions.
+
+        Parameters
+        ----------
+            pathToChunk : str
+
+            classifier : classfierClass 
+                Trained classifier. 
+
+            nMetrices : int
+                Number if metrices used. (since chunks are simple numpy arrays, no column headers are loaded)
+
+            probCutoff : float
+                Probability cutoff.
+        Returns
+        -------
+            Numpy array. Chunks with appended probability.
+        """
+
+        X =  np.load(pathToChunk,allow_pickle=True)
+        boolSelfIntIdx = X[:,0] != X[:,1] 
+        X = X[boolSelfIntIdx]
+        classProba = classifier.predict(X[:,[n+3 for n in range(nMetrices)]])
+
+        #boolPredIdx = classProba >= probCutoff
+        #boolIdx = np.sum(boolPredIdx,axis=1) > 0
+        predX = np.append(X[:,2],classProba.reshape(X.shape[0],-1),axis=1)
+        np.save(
+                file = pathToChunk,
+                arr = predX)
+
+        return predX
+
 
     def _load(self, X):
-        "Load data"
+        """
+        Intitiates data.
+
+        Parameters
+        ----------
+
+        X  pd.DataFrame 
+    
+        Returns
+        -------
+        None
+
+        Raises
+        -------
+        ValueError if X is not a pandas data frame.
+
+        """
         if isinstance(X, pd.DataFrame):
             
             self.X = X
@@ -266,266 +407,6 @@ class ComplexFinder(object):
         else:
 
             raise ValueError("X must be a pandas data frame")
-
-
-    def _addModelToSignals(self,signalModels):
-        "Asigns the model atributes to the signal."
-        for fitModel in signalModels:
-            modelID = fitModel["id"]
-            if len(fitModel) == 1:
-                del self.Signals[self.currentAnalysisName][modelID]
-            if modelID in self.Signals[self.currentAnalysisName]:
-                for k,v in fitModel.items():
-                    if k != 'id':
-                       # print(self.Signals[self.currentAnalysisName][modelID])
-                        setattr(self.Signals[self.currentAnalysisName][modelID],k,v)
-                self.Signals[self.currentAnalysisName][modelID].saveResults()
-                
-    def _checkGroups(self):
-        "Checks grouping. For comparision of multiple co-elution data sets."
-        
-        if isinstance(self.params["grouping"],dict):
-            if len(self.params["grouping"]) == 0:
-                raise ValueError("Example for grouping : {'KO':['KO_01.txt','KO_02.txt'], 'WT':['WT_01.txt','WT_02.txt'] } Aborting.. ")
-            else:
-                combinedSamples = sum(self.params["grouping"].values(), [])
-                if all(x in combinedSamples for x in self.params["analysisName"]):
-                    print("Grouping checked..\nAll columnSuffixes found in grouping.")
-                else:
-                    raise ValueError("Could not find all grouping names in loaded dataframe.. Aborting ..")
-                
-
-    def _findPeaks(self, n_jobs=3):
-        ""
-        if self.allSamplesFound:
-            print("Info :: Signals loaded and found. Proceeding ...")
-            return
-        pathToSignal = os.path.join(self.params["pathToComb"],"signals.lzma")
-        if os.path.exists(pathToSignal):
-            self.Signals = load(pathToSignal)
-            print("\nLoading pickled signal intensity")
-            if all(analysisName in self.Signals for analysisName in self.params["analysisName"]):
-                print("Info :: All samples found in loaded Signals..")
-                self.allSamplesFound = True
-                return
-        
-            
-        if not hasattr(self , "Signals"):
-            self.Signals = OrderedDict()
-
-        self.Signals[self.currentAnalysisName] = dict()
-        peakModel = self.params['peakModel']
-
-        for entryID, signal in self.X.iterrows():
-
-            self.Signals[self.currentAnalysisName][entryID] = Signal(signal.values,
-                                            ID=entryID, 
-                                            peakModel=peakModel, 
-                                            smoothSignal = self.params["smoothSignal"],
-                                            savePlots = self.params["plotSignalProfiles"],
-                                            savePeakModels = self.params["savePeakModels"],
-                                            maxPeaks=self.params["maxPeaksPerSignal"],
-                                            metrices=self.params["metrices"],
-                                            pathToTmp = self.params["pathToTmp"][self.currentAnalysisName],
-                                            normalizationValue = self.params["normValueDict"][entryID] if entryID in self.params["normValueDict"] else None,
-                                            removeSingleDataPointPeaks = self.params["removeSingleDataPointPeaks"],
-                                            analysisName = self.currentAnalysisName,
-                                            r2Thresh = self.params["r2Thresh"],
-                                            minDistanceBetweenTwoPeaks = self.params["minDistanceBetweenTwoPeaks"])
-
-        
-        t1 = time.time()
-        print("\n\nStarting Signal modelling .. (n_jobs = {})".format(n_jobs))
-        
-        fittedModels = Parallel(n_jobs=n_jobs, verbose=1)(delayed(Signal.fitModel)() for Signal in self.Signals[self.currentAnalysisName].values())
-        
-        self._addModelToSignals(fittedModels)
-        
-        print("Peak fitting done time : {} secs".format(round((time.time()-t1))))
-        print("Each feature's fitted models is stored as pdf and txt is stored in model plots (if savePeakModels and plotSignalProfiles was set to true)")
-        
-        #dump(self.Signals,pathToSignal)
-
-    def _saveSignals(self):
-        ""
-        if hasattr(self,"Signals") :
-            pathToSignal = os.path.join(self.params["pathToComb"],"signals.lzma")
-            dump(self.Signals.copy(),pathToSignal)
-        
-        self.Xs = {}
-        for analysisName in self.params["analysisName"]:
-            pathToFile = os.path.join(self.params["pathToTmp"][analysisName],"preprocessedSignals({}).txt".format(analysisName))
-            signals = self.Signals[analysisName]
-            data = dict([(k,v.Y) for k,v in signals.items() if v.valid and v.validModel])
-            df = pd.DataFrame().from_dict(data,orient="index")
-            df.to_csv(pathToFile,sep="\t")
-            self.Xs[analysisName] = df
-            X = self.Xs[analysisName].reset_index()
-        
-            np.save(os.path.join(self.params["pathToTmp"][analysisName],"source.npy"),X.values)
-            
-
-    def _calculateDistance(self):
-        """
-        Calculates distances between Signals by creating chunks of signals. Each chunk is analysed separately.
-        ToDo : 
-        delete all npy files in chunks? To be on safe side, if df is reduced.
-        parameters
-
-        returns
-            None
-        """
-        global entriesInChunks
-        
-        print("\nStarting Distance Calculation ...")
-        t1 = time.time()
-        
-        chunks = self.signalChunks[self.currentAnalysisName]
-        #return
-        entrieChunkPath = os.path.join(self.params["pathToComb"], "entriesInChunk.pkl")
-        if not self.params["recalculateDistance"] and all(os.path.exists(x.replace(".pkl",".npy")) for x in chunks) and os.path.exists(entrieChunkPath):
-            print("All chunks found for distance calculation.")
-            if not self.entriesInChunkLoaded:
-                with open(os.path.join(self.params["pathToComb"], "entriesInChunk.pkl"),"rb") as f:
-                       entriesInChunks = pickle.load(f)
-                self.entriesInChunkLoaded = True
-
-        else:
-
-            chunkItems = Parallel(n_jobs=self.params["n_jobs"], verbose=10)(delayed(calculateDistanceP)(c) for c in chunks)
-            entriesInChunks[self.currentAnalysisName] = {}
-            for k,v in chunkItems:
-                for E1E2 in v:
-                    entriesInChunks[self.currentAnalysisName][E1E2] = k 
-            
-            with open(os.path.join(self.params["pathToComb"], "entriesInChunk.pkl"),"wb") as f:
-                        pickle.dump(entriesInChunks,f)
-
-        print("Distance computing/checking: {} secs\n".format(round(time.time()-t1)))
-
-    def _createSignalChunks(self,chunkSize = 30):
-        """
-        Creates signal chunks at given chunk size. 
-        
-        parameter
-            chunkSize - int. default 30. Nuber of signals in a single chunk.
-
-        returns
-            list of paths to the saved chunks.
-        """
-        pathToSignalChunk = os.path.join(self.params["pathToComb"],"signalChunkNames.lzma")
-        if os.path.exists(pathToSignalChunk) and not self.params["recalculateDistance"]:
-            self.signalChunks = load(pathToSignalChunk)
-            print("Signal chunks loaded and found.")
-            if all(analysisName in self.signalChunks for analysisName in self.params["analysisName"]):
-                print("Checked... all samples found.")
-                return
-            else:
-                print("Info :: Not all samples found. Creating new signal chunks..")
-        
-        if not hasattr(self,"signalChunks"):
-            self.signalChunks = dict() 
-        else:
-            self.signalChunks.clear()
-        print("Info :: Creating signal chunks for distance calculation.")
-        #print(self.params["metrices"])
-        for analysisName in self.params["analysisName"]:
-            print("Info :: {} signal chunk creation started." .format(analysisName))
-            if "umap-dist" in self.params["metrices"]:
-                embed = umap.UMAP(min_dist=0.0000000000001, n_neighbors=5, metric = "correlation", random_state=56).fit_transform(minMaxNorm(self.Xs[analysisName].values,axis=1))
-                embed = pd.DataFrame(embed,index=self.Xs[analysisName].index)
-
-            signals = list(self.Signals[analysisName].values())
-
-            for n,Signal in enumerate(self.Signals[analysisName].values()):
-                setattr(Signal,"otherSignals", signals[n:])
-
-            c = []
-            
-
-            for n,chunk in enumerate(chunks(signals,chunkSize)):
-                pathToChunk = os.path.join(self.params["pathToTmp"][analysisName],"chunks",str(n)+".pkl")
-                #if not os.path.exists(pathToChunk) and not self.params["recalculateDistance"]:
-
-                chunkItems =  [
-                    {"ID" : str(signal.ID),
-                    "chunkName" : str(n),
-                    "Y" : np.array(signal.Y),
-                   # "Ys" : self.Xs[analysisName].loc[[s.ID for s in signal.otherSignals]].values,
-                    "ownPeaks" : signal._collectPeakResults(),
-                    "otherSignalPeaks" : [s._collectPeakResults() for s in signal.otherSignals],
-                    "E2" : [str(s.ID) for s in signal.otherSignals],
-                    "metrices" : self.params["metrices"],
-                    "pathToTmp" : self.params["pathToTmp"][analysisName],
-                    "embedding" : embed.loc[signal.ID].values if "umap-dist" in self.params["metrices"] else [],
-                    "otherSignalEmbeddings" : [embed.loc[s.ID].values for s in signal.otherSignals] if "umap-dist" in self.params["metrices"] else []} for signal in chunk]
-                
-
-                with open(pathToChunk,"wb") as f:
-                    pickle.dump(chunkItems,f)
-                
-                c.append(pathToChunk)
-            
-            self.signalChunks[analysisName] = [p for p in c]
-        print(self.signalChunks)
-        dump(self.signalChunks,pathToSignalChunk)
-
-
-
-    def _collectRSquaredAndFitDetails(self):
-        """
-        Data are collected from txt files in the modelPlots folder. 
-            
-        """
-        if not self.params["savePeakModels"]:
-            print("!! Warning !! This parameter is depracted and from now on always true.")
-
-        rSqured = [] 
-        entryList = []
-        pathToPlotFolder = os.path.join(self.params["pathToTmp"][self.currentAnalysisName],"result","modelPlots")
-        resultFolder = os.path.join(self.params["pathToTmp"][self.currentAnalysisName],"result")
-
-        fittedPeaksPath = os.path.join(resultFolder,"fittedPeaks.txt")
-        nPeaksPath = os.path.join(resultFolder,"nPeaks.txt")
-        if os.path.exists(fittedPeaksPath) and os.path.exists(nPeaksPath):
-            print("Warning :: FittedPeaks detected. If you changed the data, you have to set the paramter 'restartAnalysis' True to include changes..")
-            return
-        if not os.path.exists(resultFolder):
-            os.mkdir(resultFolder)
-        #ugly solution to read file names
-        #find squared R
-        for file in os.listdir(pathToPlotFolder):
-            if file.endswith(".txt"):
-                try:
-                    r = float(file.split("_")[-1][:-4])
-                    entryList.append(file.split("_r2")[0])
-                    rSqured.append({"ID":file.split("_")[0],"r2":r})
-                except:
-                    continue
-        df = pd.DataFrame(rSqured, columns = ["r2"])
-        df["EntryID"] = entryList
-         
-        df.to_csv(os.path.join(resultFolder,"rSquared.txt"),sep="\t")
-
-        #number of peaks
-        collectNumbPeaks = []
-
-        # find peak properties..
-        df = pd.DataFrame(columns=["Key","ID","Amplitude","Center","Sigma","fwhm","height","auc"])
-        for file in os.listdir(pathToPlotFolder):
-            if file.endswith(".txt"):
-                try:
-                    dfApp = pd.read_csv(os.path.join(pathToPlotFolder,file), sep="\t")
-                    df = df.append(dfApp)
-                    collectNumbPeaks.append({"Key":dfApp["Key"].iloc[0],"N":len(dfApp.index)})
-                except:
-                    continue
-
-        df.index = np.arange(df.index.size)
-        df.to_csv(fittedPeaksPath,sep="\t", index = None)
-
-        pd.DataFrame(collectNumbPeaks).to_csv(nPeaksPath,sep="\t", index = None)
-
 
     def _loadReferenceDB(self):
         """
@@ -568,7 +449,7 @@ class ComplexFinder(object):
             entryList = np.unique(np.array(entryList).flatten())
             print("Info :: Entries used for filtering: {}".format(len(entryList)))
             dbSize = self.DB.filterDBByEntryList(entryList)
-           # self._addMetricToStats("nPositiveInteractions",dbSize)
+
             #add decoy to db
             if dbSize == 0:
                 raise ValueError("Warning :: No hits found in database. Check dabaseFilter keyword.")
@@ -581,23 +462,277 @@ class ComplexFinder(object):
             self.DB.addDecoy(sizeFraction=self.params["decoySizeFactor"])
             self.DB.df.to_csv(pathToDatabase,sep="\t")
             print("Info :: Database saved to {}".format(pathToDatabase))
+    
+                
+    def _checkGroups(self):
+        "Checks grouping. For comparision of multiple co-elution data sets."
+        
+        if isinstance(self.params["grouping"],dict):
+            if len(self.params["grouping"]) == 0:
+                raise ValueError("Example for grouping : {'KO':['KO_01.txt','KO_02.txt'], 'WT':['WT_01.txt','WT_02.txt'] } Aborting.. ")
+            else:
+                combinedSamples = sum(self.params["grouping"].values(), [])
+                if all(x in combinedSamples for x in self.params["analysisName"]):
+                    print("Grouping checked..\nAll columnSuffixes found in grouping.")
+                else:
+                    raise ValueError("Could not find all grouping names in loaded dataframe.. Aborting ..")
+                
 
-    def _addMetricesToDB(self,analysisName):
+    def _findPeaks(self, n_jobs=3):
         """
-        Adds distance metrices to the database entries
-        that were found in the co-elution profiles.
+        Initiates for each feature in the data a Signal instance. 
+        Peak detection and modelling is then performed.
+        Results are saved to hard drive for each run. 
+
+        Numerous parameters effect signal modelling (smoothing, maxPeaks, r2Thresh, ...)
+
+        Create self.Signals (OrderedDict) which is a dict. Key = analysisName, which
+        contains another dict with entries as keys and values are of type Signal class.
 
         Parameters
         ----------
+
+        n_jobs  int. Number of worker processes.
     
         Returns
         -------
         None
 
         """
-        metricColumns = self.params["metrices"] 
-        if not self.params["noDatabaseForPredictions"]:
-            self.DB.matchMetrices(self.params["pathToTmp"][analysisName],entriesInChunks[analysisName],metricColumns,analysisName,forceRematch=False)
+        if self.allSamplesFound:
+            print("Info :: Signals loaded and found. Proceeding ...")
+            return
+        pathToSignal = os.path.join(self.params["pathToComb"],"signals.lzma")
+        if os.path.exists(pathToSignal):
+            self.Signals = load(pathToSignal)
+            print("\nLoading pickled signal intensity")
+            if all(analysisName in self.Signals for analysisName in self.params["analysisName"]):
+                print("Info :: All samples found in loaded Signals..")
+                self.allSamplesFound = True
+                return
+        
+            
+        if not hasattr(self , "Signals"):
+            self.Signals = OrderedDict()
+
+        self.Signals[self.currentAnalysisName] = dict()
+        peakModel = self.params['peakModel']
+
+        for entryID, signal in self.X.iterrows():
+
+            self.Signals[self.currentAnalysisName][entryID] = Signal(signal.values,
+                                            ID= entryID, 
+                                            peakModel= peakModel, 
+                                            smoothSignal = self.params["smoothSignal"],
+                                            savePlots = self.params["plotSignalProfiles"],
+                                            savePeakModels = self.params["savePeakModels"],
+                                            maxPeaks= self.params["maxPeaksPerSignal"],
+                                            metrices= self.params["metrices"],
+                                            pathToTmp = self.params["pathToTmp"][self.currentAnalysisName],
+                                            normalizationValue = self.params["normValueDict"][entryID] if entryID in self.params["normValueDict"] else None,
+                                            removeSingleDataPointPeaks = self.params["removeSingleDataPointPeaks"],
+                                            analysisName = self.currentAnalysisName,
+                                            r2Thresh = self.params["r2Thresh"],
+                                            minDistanceBetweenTwoPeaks = self.params["minDistanceBetweenTwoPeaks"])
+
+        
+        t1 = time.time()
+        print("\n\nStarting Signal modelling .. (n_jobs = {})".format(n_jobs))
+        
+        fittedModels = Parallel(n_jobs=n_jobs, verbose=1)(delayed(Signal.fitModel)() for Signal in self.Signals[self.currentAnalysisName].values())
+        
+        self._addModelToSignals(fittedModels)
+        
+        print("Peak fitting done time : {} secs".format(round((time.time()-t1))))
+        print("Each feature's fitted models is stored as pdf and txt is stored in model plots (if savePeakModels and plotSignalProfiles was set to true)")
+        
+
+    def _saveSignals(self):
+        ""
+        if hasattr(self,"Signals") :
+            pathToSignal = os.path.join(self.params["pathToComb"],"signals.lzma")
+            dump(self.Signals.copy(),pathToSignal)
+        
+        self.Xs = {}
+        for analysisName in self.params["analysisName"]:
+            pathToFile = os.path.join(self.params["pathToTmp"][analysisName],"preprocessedSignals({}).txt".format(analysisName))
+            signals = self.Signals[analysisName]
+            data = dict([(k,v.Y) for k,v in signals.items() if v.valid and v.validModel])
+            df = pd.DataFrame().from_dict(data,orient="index")
+            df.to_csv(pathToFile,sep="\t")
+            self.Xs[analysisName] = df
+            X = self.Xs[analysisName].reset_index()
+        
+            np.save(os.path.join(self.params["pathToTmp"][analysisName],"source.npy"),X.values)
+            
+
+    def _calculateDistance(self):
+        """
+        Calculates Distance between protein protein pairs based
+        on their signal profile.
+
+        Parameters
+        ----------
+        signalModels - list
+            List of modelfits (dict)
+
+        Returns
+        -------
+        None
+
+        """
+        global entriesInChunks
+        
+        print("\nStarting Distance Calculation ...")
+        t1 = time.time()
+        
+        chunks = self.signalChunks[self.currentAnalysisName]
+        #return
+        entrieChunkPath = os.path.join(self.params["pathToComb"], "entriesInChunk.pkl")
+        if not self.params["recalculateDistance"] and all(os.path.exists(x.replace(".pkl",".npy")) for x in chunks) and os.path.exists(entrieChunkPath):
+            print("All chunks found for distance calculation.")
+            if not self.entriesInChunkLoaded:
+                with open(os.path.join(self.params["pathToComb"], "entriesInChunk.pkl"),"rb") as f:
+                       entriesInChunks = pickle.load(f)
+                self.entriesInChunkLoaded = True
+
+        else:
+
+            chunkItems = Parallel(n_jobs=self.params["n_jobs"], verbose=10)(delayed(calculateDistanceP)(c) for c in chunks)
+            entriesInChunks[self.currentAnalysisName] = {}
+            for k,v in chunkItems:
+                for E1E2 in v:
+                    entriesInChunks[self.currentAnalysisName][E1E2] = k 
+            
+            with open(os.path.join(self.params["pathToComb"], "entriesInChunk.pkl"),"wb") as f:
+                        pickle.dump(entriesInChunks,f)
+
+        print("Distance computing/checking: {} secs\n".format(round(time.time()-t1)))
+
+    def _createSignalChunks(self,chunkSize = 30):
+        """
+        Creates signal chunks at given chunk size. 
+        
+        Parameter
+        ---------
+            chunkSize - int. default 30. Nuber of signals in a single chunk.
+
+        Returns
+        -------
+            list of paths to the saved chunks.
+        """
+        pathToSignalChunk = os.path.join(self.params["pathToComb"],"signalChunkNames.lzma")
+        if os.path.exists(pathToSignalChunk) and not self.params["recalculateDistance"]:
+            self.signalChunks = load(pathToSignalChunk)
+            print("Info :: Signal chunks loaded and found. Checking if all runs are present.")
+            if all(analysisName in self.signalChunks for analysisName in self.params["analysisName"]):
+                print("Info :: Checked... all samples found.")
+                return
+            else:
+                print("Info :: Not all samples found. Creating new signal chunks..")
+        
+        if not hasattr(self,"signalChunks"):
+            self.signalChunks = dict() 
+        else:
+            self.signalChunks.clear()
+
+        for analysisName in self.params["analysisName"]:
+            print("Info :: {} signal chunk creation started.\nThis may take some minutes.." .format(analysisName))
+            if "umap-dist" in self.params["metrices"]:
+                embed = umap.UMAP(min_dist=0.0000000000001, n_neighbors=5, metric = "correlation", random_state=56).fit_transform(minMaxNorm(self.Xs[analysisName].values,axis=1))
+                embed = pd.DataFrame(embed,index=self.Xs[analysisName].index)
+
+            signals = list(self.Signals[analysisName].values())
+
+            for n,Signal in enumerate(self.Signals[analysisName].values()):
+                setattr(Signal,"otherSignals", signals[n:])
+
+            c = []
+            
+
+            for n,chunk in enumerate(chunks(signals,chunkSize)):
+                pathToChunk = os.path.join(self.params["pathToTmp"][analysisName],"chunks",str(n)+".pkl")
+                #if not os.path.exists(pathToChunk) and not self.params["recalculateDistance"]:
+
+                chunkItems =  [
+                    {
+                    "ID"               : str(signal.ID),
+                    "chunkName"         : str(n),
+                    "Y"                 : np.array(signal.Y),
+                    "ownPeaks"          : signal._collectPeakResults(),
+                    "otherSignalPeaks"  : [s._collectPeakResults() for s in signal.otherSignals],
+                    "E2"                : [str(s.ID) for s in signal.otherSignals],
+                    "metrices"          : self.params["metrices"],
+                    "pathToTmp"         : self.params["pathToTmp"][analysisName],
+                    "embedding"         : embed.loc[signal.ID].values if "umap-dist" in self.params["metrices"] else [],
+                    "otherSignalEmbeddings" : [embed.loc[s.ID].values for s in signal.otherSignals] if "umap-dist" in self.params["metrices"] else []} for signal in chunk]
+                
+                with open(pathToChunk,"wb") as f:
+                    pickle.dump(chunkItems,f)
+                
+                c.append(pathToChunk)
+            
+            self.signalChunks[analysisName] = [p for p in c if os.path.exists(p)] #
+
+        #saves signal chunls.
+        dump(self.signalChunks,pathToSignalChunk)
+
+
+
+    def _collectRSquaredAndFitDetails(self):
+        """
+        Data are collected from txt files in the modelPlots folder. 
+            
+        """
+        if not self.params["savePeakModels"]:
+            print("!! Warning !! This parameter is depracted and from now on always true.")
+            self.params["savePeakModels"] = True
+
+        rSqured = [] 
+        entryList = []
+        pathToPlotFolder = os.path.join(self.params["pathToTmp"][self.currentAnalysisName],"result","modelPlots")
+        resultFolder = os.path.join(self.params["pathToTmp"][self.currentAnalysisName],"result")
+
+        fittedPeaksPath = os.path.join(resultFolder,"fittedPeaks.txt")
+        nPeaksPath = os.path.join(resultFolder,"nPeaks.txt")
+        if os.path.exists(fittedPeaksPath) and os.path.exists(nPeaksPath):
+            print("Warning :: FittedPeaks detected. If you changed the data, you have to set the paramter 'restartAnalysis' True to include changes..")
+            return
+        if not os.path.exists(resultFolder):
+            os.mkdir(resultFolder)
+
+        #ugly solution to read file names, fine for now
+        #find squared R
+        for file in os.listdir(pathToPlotFolder):
+            if file.endswith(".txt"):
+                try:
+                    r = float(file.split("_")[-1][:-4])
+                    entryList.append(file.split("_r2")[0])
+                    rSqured.append({"ID":file.split("_")[0],"r2":r})
+                except:
+                    continue
+        df = pd.DataFrame(rSqured, columns = ["r2"])
+        df["EntryID"] = entryList
+         
+        df.to_csv(os.path.join(resultFolder,"rSquared.txt"),sep="\t")
+
+        #number of peaks
+        collectNumbPeaks = []
+
+        # find peak properties..
+        df = pd.DataFrame(columns=["Key","ID","Amplitude","Center","Sigma","fwhm","height","auc"])
+        for file in os.listdir(pathToPlotFolder):
+            if file.endswith(".txt"):
+                try:
+                    dfApp = pd.read_csv(os.path.join(pathToPlotFolder,file), sep="\t")
+                    df = df.append(dfApp)
+                    collectNumbPeaks.append({"Key":dfApp["Key"].iloc[0],"N":len(dfApp.index)})
+                except:
+                    continue
+
+        df.index = np.arange(df.index.size)
+        df.to_csv(fittedPeaksPath,sep="\t", index = None)
+        pd.DataFrame(collectNumbPeaks).to_csv(nPeaksPath,sep="\t", index = None)
 
 
     def _trainPredictor(self):
@@ -627,13 +762,8 @@ class ComplexFinder(object):
             self.classifier = joblib.load(classifierFileName)
             return
 
-        # f not os.path.exists(folderToResults):
-        #     os.mkdir(folderToResults)i
         
-       # if self.params["metricesForPrediction"] is None:
         metricColumnsForPrediction = self.params["metrices"]
-       # else:
-          #  metricColumnsForPrediction = self.params["metricesForPrediction"]
 
         totalColumns = metricColumnsForPrediction + ['Class',"E1E2"] 
         
@@ -678,10 +808,7 @@ class ComplexFinder(object):
         
         print("DB prediction saved - DBpred.txt :: Classifier pickled and saved 'trainedClassifier.sav'")
 
-    def _addMetricToStats(self,metricName, value):
 
-        if metricName in self.stats.columns:
-            self.stats.loc[self.currentAnalysisName,metricName] = value
 
     def _loadPairsForPrediction(self):
         ""
@@ -695,38 +822,6 @@ class ComplexFinder(object):
             yield (X,len(chunks))
 
             
-        
-    def _chunkPrediction(self,pathToChunk,classifier,nMetrices,probCutoff):
-        """
-        Predicts for each chunk the proability for positive interactions.
-
-        Parameters
-        ----------
-            pathToChunk : str
-
-            nMetrices : int
-                Number if metrices used. (since chunks are simple numpy arrays, no column headers are loaded)
-
-            probCutoff : float
-                Probability cutoff.
-        Returns
-        -------
-        Chunks with appended probability.
-        """
-
-        X =  np.load(pathToChunk,allow_pickle=True)
-        boolSelfIntIdx = X[:,0] != X[:,1] 
-        X = X[boolSelfIntIdx]
-        classProba = classifier.predict(X[:,[n+3 for n in range(nMetrices)]])
-
-        #boolPredIdx = classProba >= probCutoff
-        #boolIdx = np.sum(boolPredIdx,axis=1) > 0
-        predX = np.append(X[:,2],classProba.reshape(X.shape[0],-1),axis=1)
-        np.save(
-                file = pathToChunk,
-                arr = predX)
-
-        return predX
 
 
 
@@ -845,13 +940,10 @@ class ComplexFinder(object):
 
 
     def _plotChunkSummary(self, data, fileName, folderToOutput):
-        # scale features and plot decision function? 
-        # most important featues in SVM?
-        ""
+        "util fn"
         data[self.params["metrices"]] = self.classifier._scaleFeatures(data[self.params["metrices"]].values)
         fig, ax = plt.subplots()
 
-        
         XX = data.melt(id_vars =  [x for x in data.columns if x not in self.params["metrices"]],value_vars=self.params["metrices"])
         sns.boxplot(data = XX, ax=ax, y = "value", x = "variable", hue = "Class")
 
@@ -914,19 +1006,11 @@ class ComplexFinder(object):
         return "".join(random.choice(letters) for i in range(n))
     
     def _scoreComplexes(self, complexDf, complexMemberIds = "subunits(UniProt IDs)", beta=2.5):
-        ""
-
-        entryPositiveComplex = [] 
-        #entries = [e.split("_",1)[0] for e in complexDf.index]
-        #print(complexDf.index)
-        for e in complexDf.index:
-           # e = e.split("_")[0]
-
-            posComplex = self.DB.assignComplexToProtein(str(e),complexMemberIds,"ComplexID")
-            entryPositiveComplex.append(posComplex)
-
+        ""       
+        
+        entryPositiveComplex = [self.DB.assignComplexToProtein(str(e),complexMemberIds,"ComplexID") for e in complexDf.index]
+           
         complexDf.loc[:,"ComplexID"] = entryPositiveComplex
-        identifiableCs = self.DB.identifiableComplexes(complexMemberIds) 
 
         scores = []
         for c,d in self.DB.indentifiedComplexes.items():
@@ -951,7 +1035,7 @@ class ComplexFinder(object):
                 scores.append(s)
       
         
-        return complexDf , np.nanmean(scores)  #np.unique(complexDf["Cluster Labels"]).size - 
+        return complexDf , np.nansum(scores)  
 
 
     def _clusterInteractions(self, predInts, clusterMethod = "HDBSCAN", plotEmbedding = True, groupFiles = [], combineProbs = True, groupName = ""):
@@ -1129,6 +1213,9 @@ class ComplexFinder(object):
 
     def _loadAndFilterDistanceMatrix(self):
         """
+        
+        Output to disk: 'highQualityInteractions(..).txt
+        However they are just the ones that show the lowest distance metrices.
 
         Parameters
         ----------
@@ -1138,17 +1225,13 @@ class ComplexFinder(object):
         None
 
         """
-        #analysisName = self.currentAnalysisName
         metricColumns = [x if not isinstance(x,dict) else x["name"] for x in self.params["metrices"]] 
         dfColumns = ["E1","E2","E1E2","apexPeakDist"] + metricColumns
-        print(dfColumns)
         q = None
         df = pd.DataFrame(columns = dfColumns)
         filteredExisting = False
         pathToFile = os.path.join(self.params["pathToComb"],"highQualityInteractions({}).txt".format(self.currentAnalysisName))
-        #if os.path.exists(pathToFile):
-         #   df = pd.read_csv(pathToTmp,sep="\t")
-          #  return df
+        
         for X,nChunks in self._loadPairsForPrediction():
             
             boolSelfIntIdx = X[:,0] == X[:,1] 
@@ -1169,13 +1252,6 @@ class ComplexFinder(object):
             if df.index.size > 50000 and q is None:
                 q = np.quantile(df[metricColumns].astype(float).values, q = 1-self.params["metricQuantileCutoff"], axis = 0)
                 
-
-
-            
-           # print("Current Chunk: ",pathToChunk)
-            
-            #first two rows E1 E2, and E1E2, apexPeakDist remove before predict
-            #classProba = self.classifier.predict(X[:,[n+4 for n in range(len(self.params["metrices"]))]])
         
         print("Info :: {} total pairwise protein-protein pairs at any distance below 10% quantile.".format(df.index.size))
         df = self._attachPeakIDtoEntries(df)
@@ -1187,6 +1263,9 @@ class ComplexFinder(object):
     def _plotComplexProfiles(self,complexDf,outputFolder,name):
         """
         Creates line charts as pdf for each profile.
+        Chart has two axes, one shows realy values and the bottom one 
+        is scaled by normalizing the highest value to one and the lowest to zero.
+        Enabled/Disabled by the parameter "plotComplexProfiles". 
 
         Parameters
         ----------
@@ -1404,6 +1483,7 @@ class ComplexFinder(object):
         
 
         self._combinePeakResults()
+        self._attachQuantificationDetails()
         self._saveSignals()
         endSignalTime = time.time()
         self.params["runTimes"]["SignalFitting&Comparision"] = time.time() - self.params["runTimes"]["StartTime"]

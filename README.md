@@ -14,8 +14,6 @@ For thousdands of features (peptides/protein) a signal was measured over differe
  ![Signal processing and protein-protein interaction prediction](/img/workflow.png)
 
 
-
-
 As a next step, we want to identify clusters. To this end, we are using the interaction probabiliy matrix obtained by the
 random forest classifier. To this end, we are calculating the UMAP embedding and apply HDBSCAN clustering. Again, we 
 are using the CORUM database to quantify the the clustering result. Both techniques, UMAP and HDBSCAN are performed 
@@ -65,13 +63,8 @@ from main import ComplexFinder
 folderPath = os.path(".","<my folder>")
 ComplexFinder().run(folderPath)
 ```
+Additionally, you can pass a list of datasets. However, we  recommend to copy required datasets in a separate folder.
 
-Additionally, you can pass a list of datasets. 
-```python
-x01 = pd.read_table("./example-data/SILAC_01.txt", sep = "\t") #loading tab delimited txt file. 
-x02 = pd.read_table("./example-data/SILAC_02.txt", sep = "\t") #loading tab delimited txt file. 
-ComplexFinder(analysisName = ["SILAC_01","SILAC_02"]).run([x01,x02]) #the result folders will be called as the anaylsisName
-```
 
 
 ## Parameters
@@ -84,13 +77,12 @@ Find below parameters to set. The default is given in brackets after the paramet
 * <del>savePeakModels [True]</del> *depracted. always True and will be removed in the next version*.
 * maxPeaksPerSignal [9] Number of peaks allowed for on signal profile.
 * minDistBetweenPeaks [3] Distance in fractions (int) between two peaks. Setting this to a smaller number results in more peaks.
-* n_jobs [4] Number of workers to model peaks, to calculate distance pairs and to train and use the classifer.
+* n_jobs [12] Number of workers to model peaks, to calculate distance pairs and to train and use the classifer.
 * kFold [5] Cross validation of classifier.
 * analysisName [None]
 * idColumn ["Uniprot ID"]
 * databaseName ["20190823_CORUM.txt"]
 * peakModel ["GaussianModel"] - which model should be used to model signal profiles. In principle all models from lmfit can be used. However, the initial parameters are only optimized for GaussianModel and LaurentzianModel. This might effect runtimes dramatically. 
-* imputeNaN [True],
 * classifierClass ["random_forest"] string. Must be string 
 * retrainClassifier [False] False, if the trainedClassifier.sav file is found, the classifier is loaded and the training is skipped. If you change the classifierGridSearch, you should set this to True. This will ensure that the classifier training is never skipped.
 * interactionProbabCutoff [0.7] Cutoff for estimator probability. Interactions with probabilities below threshold will be removed.
@@ -113,6 +105,9 @@ Find below parameters to set. The default is given in brackets after the paramet
 * grouping [None] None or dict. Indicates which samples (file) belong to one group. Let's assume 4 files with the name 'KO_01.txt', 'KO_02.txt', 'WT_01.txt' and 'WT_02.txt' are being analysed. The grouping dict should like this : {"KO":[KO_01.txt','KO_02.txt'],"WT":['WT_01.txt','WT_02.txt']} in order to combine them for statistical testing (e.g. t-test of log2 transformed peak-AUCs). Note that when analysis multiple runs (e.g. grouping present) then calling ComplexFinder().run(X) - X must be a path to a folder containing the files.
 * decoySizeFactor [1.2] float. Fraction of decoy pairwise interactions compared to positive interactions found in the database. If > 1, the decoy database will be bigger than the positive data which reflects more the true situation (less proteins interact with each other compared to the ones that form a complex.)
 * classifierTestSize  [0.25] float. Fraction of the created database containing positive and negative protein-protein interactions that will be used for testing (for example ROC curve analysis) and classification report.
+* precision [None] Precision to use to filter protein-protein interactions. If None, the filtering will be performed based on the parameter *interactionProbabCutoff*.
+* considerOnlyInteractionsPresentInAllRuns [False] Can be either bool to filter for protein - protein interactions that are present in all runs. If an integer is provided. the pp interactions are filtered based on the number of runs in which they were quantified. A value of 4 would indicate that the pp interaction must have been predicted in all runs. 
+
 ```python
 #random forest grid search
 RF_GRID_SEARCH = {
@@ -155,7 +150,7 @@ from lmfit import models
 model = getattr(models, basis_func['type'])(prefix=prefix)
 ```
 
-Therofore, you can provide any string that matches a model name in the lmfit package. Please note that, only peak parameters and constraints 
+Therefore, you can provide any string that matches a model name in the lmfit package. Please note that, only peak parameters and constraints 
 are implemented and tested for Gaussian, Lorentzian and Skewed Gaussian. So if your fit does not work, you may want to check the following
 function of the *Signal.py* class module.
 
@@ -209,8 +204,6 @@ def _addParams(self,modelParams,prefix,peakIdx,i):
 
 Please not that you also have to alter the functions *_getHeight* and *_getFWHM* for your peak models. 
 You can check the equations [here](http://openafox.com/science/peak-function-derivations.html).
-
-
 
 
  # Future Directions

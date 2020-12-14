@@ -80,62 +80,64 @@ entriesInChunks = dict()
 class ComplexFinder(object):
 
     def __init__(self,
-                indexIsID = True,
-                plotSignalProfiles = False,
-                plotComplexProfiles = False,
-                removeSingleDataPointPeaks = True,
-                restartAnalysis = False,
+                
+                alignMethod = "RadiusNeighborsRegressor",#"RadiusNeighborsRegressor",#"KNeighborsRegressor",#"LinearRegression", # RadiusNeighborsRegressor
+                alignRuns = False,
+                alignWindow = 3,
+                analysisMode = "label-free", #replicate #[label-free,SILAC,SILAC-TMT]
+                analysisName = None,
+                binaryDatabase = False,
+                classifierClass = "random_forest",
+                classifierTestSize = 0.25,
+                classiferGridSearch = RF_GRID_SEARCH,
+                considerOnlyInteractionsPresentInAllRuns = 2,
+                databaseFilter = {'Organism': ["Human"]},#{"Confidence" : [1,2,3,4]} - for hu.map2.0,
+                databaseIDColumn = "subunits(UniProt IDs)",
+                databaseFileName = "20190823_CORUM.txt",#"humap2.txt",#s"humap2.txt",#2#
+                databaseHasComplexAnnotations = True,
+                decoySizeFactor = 1.2,
+                grouping = {"WT": ["D3_WT_04.txt","D3_WT_02.txt"],"KO":["D3_KO_01.txt","D3_KO_02.txt"]},
+                #""WT":["D2_WT_02.txt","D2_WT_01.txt"]},#WT":["D2_WT_02.txt","D2_WT_01.txt"],"KO":["D2_CLPP_KO_02.txt","D2_CLPP_KO_01.txt"]},#{"D0": ["D0_aebersold.txt"]},#{"Interphase" : ["D1_interphase.txt"],"Mitosis" : ["D1_mitosis.txt"]},#"WT2": ["D3_WT_03.txt","D3_WT_04.txt"],"WT1":["D3_WT_01.txt","D3_WT_02.txt"],"KO":["D3_KO_01.txt","D3_KO_02.txt"]},#"Interphase" : ["D1_interphase.txt"],"Mitosis" : ["D1_mitosis.txt"]},#"WT2": ["D3_WT_03.txt","D3_WT_04.txt"],"WT1":["D3_WT_01.txt","D3_WT_02.txt"],"KO":["D3_KO_01.txt","D3_KO_02.txt"]},#,#{"WT2": ["D3_WT_03.txt","D3_WT_04.txt"],"WT1":["D3_WT_01.txt","D3_WT_02.txt"],"KO":["D3_KO_01.txt","D3_KO_02.txt"]}, #"Interphase" : ["D1_interphase.txt"],"Mitosis" : ["D1_mitosis.txt"]},#,#  },#"WT2": ["D3_WT_03.txt","D3_WT_04.txt"]{"WT":["D2_WT_01.txt","D2_WT_02.txt"],"KO":["D2_CLPP_KO_01.txt","D2_CLPP_KO_02.txt"]},#,
+                hdbscanDefaultKwargs = {"min_cluster_size":4,"min_samples":1},
+                indexIsID = False,
+                idColumn = "Uniprot ID",
+                interactionProbabCutoff = 0.7,
+                kFold = 3,
                 maxPeaksPerSignal = 15,
                 maxPeakCenterDifference = 1.8,
-                n_jobs = 12,
-                classifierTestSize = 0.25,
-                binaryDatabase = False,
-                noDatabaseForPredictions = False,
-                useRawDataForDimensionalReduction = False,
-                scaleRawDataBeforeDimensionalReduction = True,
-                kFold = 3,
-                alignRuns = False,
-                alignMethod = "RadiusNeighborsRegressor",#"RadiusNeighborsRegressor",#"KNeighborsRegressor",#"LinearRegression", # RadiusNeighborsRegressor
-                alignWindow = 3,
+                metrices = ["apex","pearson","euclidean","p_pearson","max_location","umap-dist"],
+                metricesForPrediction = None,#["pearson","euclidean","apex"],
+                metricQuantileCutoff = 0.90,
                 minDistanceBetweenTwoPeaks = 3,
-                analysisName = None,
-                idColumn = "Uniprot ID",
-                databaseFileName = "20190823_CORUM.txt",#"humap2.txt",#s"humap2.txt",#2#
+                n_jobs = 12,
+                noDatabaseForPredictions = False,
+                normValueDict = {},
                 peakModel = "GaussianModel",#"SkewedGaussianModel",#"LorentzianModel",
-                imputeNaN = True,
+                plotSignalProfiles = False,
+                plotComplexProfiles = False,
+                precision = 0.5,
+                r2Thresh = 0.85,
+                removeSingleDataPointPeaks = True,
+                restartAnalysis = False,
+                retrainClassifier = False,
+                recalculateDistance = False,
+                runName = None,
+                scaleRawDataBeforeDimensionalReduction = True,
                 smoothSignal = True,
                 smoothWindow = 2,
-                classifierClass = "GaussianNB",# "random_forest",
-                grouping = {"WT": ["D3_WT_04.txt","D3_WT_02.txt"],"KO":["D3_KO_01.txt","D3_KO_02.txt"]},#""WT":["D2_WT_02.txt","D2_WT_01.txt"]},#WT":["D2_WT_02.txt","D2_WT_01.txt"],"KO":["D2_CLPP_KO_02.txt","D2_CLPP_KO_01.txt"]},#{"D0": ["D0_aebersold.txt"]},#{"Interphase" : ["D1_interphase.txt"],"Mitosis" : ["D1_mitosis.txt"]},#"WT2": ["D3_WT_03.txt","D3_WT_04.txt"],"WT1":["D3_WT_01.txt","D3_WT_02.txt"],"KO":["D3_KO_01.txt","D3_KO_02.txt"]},#"Interphase" : ["D1_interphase.txt"],"Mitosis" : ["D1_mitosis.txt"]},#"WT2": ["D3_WT_03.txt","D3_WT_04.txt"],"WT1":["D3_WT_01.txt","D3_WT_02.txt"],"KO":["D3_KO_01.txt","D3_KO_02.txt"]},#,#{"WT2": ["D3_WT_03.txt","D3_WT_04.txt"],"WT1":["D3_WT_01.txt","D3_WT_02.txt"],"KO":["D3_KO_01.txt","D3_KO_02.txt"]}, #"Interphase" : ["D1_interphase.txt"],"Mitosis" : ["D1_mitosis.txt"]},#,#  },#"WT2": ["D3_WT_03.txt","D3_WT_04.txt"]{"WT":["D2_WT_01.txt","D2_WT_02.txt"],"KO":["D2_CLPP_KO_01.txt","D2_CLPP_KO_02.txt"]},#,
-                analysisMode = "label-free", #replicate #[label-free,SILAC,SILAC-TMT]
-                retrainClassifier = False,
-                interactionProbabCutoff = 0.7,
-                databaseFilter = {'Organism': ["Human"]},#{"Confidence" : [1,2,3,4]},#, #,#{
-                databaseIDColumn = "subunits(UniProt IDs)",#"Uniprot_ACCs",#
-                databaseHasComplexAnnotations = True,
-                normValueDict = {},
-                r2Thresh = 0.85,
-                metrices = ["apex","pearson","euclidean","p_pearson","max_location","umap-dist"],#"euclidean","p_pearson","max_location"], #"euclidean",,"spearman"##,
-                metricesForPrediction = None,#["pearson","euclidean","apex"],
-                classiferGridSearch = RF_GRID_SEARCH,
-                hdbscanDefaultKwargs = {"min_cluster_size":4,"min_samples":1},
+                useRawDataForDimensionalReduction = False,
                 umapDefaultKwargs = {"min_dist":0.0000001,"n_neighbors":3,"n_components":2},
-                runName = None,
-                metricQuantileCutoff = 0.90,
-                recalculateDistance = False,
-                decoySizeFactor = 1.2,
-                precision = 0.5,
-                considerOnlyInteractionsPresentInAllRuns = 2):
+
+                quantFiles = []
+                ):
         """
         Init ComplexFinder Class
-
         
 
         Parameters
         ----------
 
        
-    
         Returns
         -------
         None
@@ -149,7 +151,6 @@ class ComplexFinder(object):
             "kFold" : kFold,
             "analysisName" : analysisName,
             "restartAnalysis" : restartAnalysis,
-            "imputeNaN" : imputeNaN,
             "metrices" : metrices,
             "peakModel" : peakModel,
             "smoothWindow" : smoothWindow,
@@ -203,8 +204,8 @@ class ComplexFinder(object):
         if not isinstance(self.params["maxPeaksPerSignal"],int):
             raise ValueError("maxPeaksPerSignal must be an integer. Current setting: {}".forma(self.params["maxPeaksPerSignal"]))
 
-        elif self.params["maxPeaksPerSignal"] < 1:
-            raise ValueError("maxPeaksPerSignal must be greater than or equal 1")
+        elif self.params["maxPeaksPerSignal"] <= 2:
+            raise ValueError("maxPeaksPerSignal must be greater than or equal 2")
 
         elif self.params["maxPeaksPerSignal"] > 20:
             print("Warning :: maxPeaksPerSignal is set to above 20, this may take quite long to model.")
@@ -231,7 +232,6 @@ class ComplexFinder(object):
         if not isinstance(self.params["metricQuantileCutoff"],float) or self.params["metricQuantileCutoff"] <= 0 or self.params["metricQuantileCutoff"] >= 1:
             raise ValueError("Parameter metricQuantileCutoff must be a float greater than 0 and smaller than 1.")
         #add database checks
-
 
         if self.params["metricesForPrediction"] is not None:
             if not isinstance(self.params["metricesForPrediction"],list):
@@ -1814,25 +1814,16 @@ class ComplexFinder(object):
 
 if __name__ == "__main__":
 
-   # X = pd.read_csv("../example-data/HeuselEtAlAebersoldLab.txt", 
-    #                sep="\t")
-    # X = pd.read_csv("../example-data/TMEM70/WT_01.txt", 
-    #                 #nrows = 500,
-    #                 sep="\t")
-    # boolIdx = X["Uniprot ID"].str.contains("NDUF")
-    # X = X.loc[boolIdx]
-
-    # Y = pd.read_csv("../example-data/TMEM70/WT_02.txt", 
-    #                 #nrows = 500,
-    #                 sep="\t")
-    # boolIdx = Y["Uniprot ID"].str.contains("NDUF")
-    # Y = Y.loc[boolIdx]
-
- #X = X.set_index("Uniprot ID")
-  #  X
-
-   # ComplexFinder(indexIsID=False,analysisName="500restoreTry",classiferGridSearch=param_grid, classifierClass="SVM").run(X)""
-    ComplexFinder(restartAnalysis = False,recalculateDistance  = False, runName = "D3_ForPaper_raw", indexIsID=False,classifierClass="random forest",retrainClassifier=False,interactionProbabCutoff = 0.66,removeSingleDataPointPeaks=True, smoothSignal=True).run("../example-data/TMEM70/")#[X,Y])
+    ComplexFinder(
+                restartAnalysis = False,
+                recalculateDistance  = False, 
+                runName = "D2_ExampleRun", 
+                indexIsID=False,
+                classifierClass="random forest",
+                retrainClassifier=False,
+                interactionProbabCutoff = 0.66,
+                removeSingleDataPointPeaks=True, 
+                smoothSignal=True).run("../example-data/example-run/")
 
 
 

@@ -38,7 +38,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.neighbors import RadiusNeighborsRegressor, KNeighborsRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import scale, minmax_scale, robust_scale
-from scipy.stats import ttest_ind
+from scipy.stats import ttest_ind, f_oneway
 
 #dimensional reduction 
 import umap
@@ -90,7 +90,7 @@ class ComplexFinder(object):
                 classifierTestSize = 0.25,
                 classiferGridSearch = RF_GRID_SEARCH,
                 considerOnlyInteractionsPresentInAllRuns = 2,
-                databaseFilter = {'Organism': ["Human"]},#{"Confidence" : [1,2,3,4]} - for hu.map2.0,
+                databaseFilter = {'Organism': ["Mouse"]},#{'Organism': ["Human"]},#{"Confidence" : [1,2,3,4]} - for hu.map2.0,
                 databaseIDColumn = "subunits(UniProt IDs)",
                 databaseFileName = "20190823_CORUM.txt",#"humap2.txt
                 databaseHasComplexAnnotations = True,
@@ -135,8 +135,153 @@ class ComplexFinder(object):
 
         Parameters
         ----------
+        
+        * alignMethod = "RadiusNeighborsRegressor",
+        
+        * alignRuns = False, 
+                    Alignment of runs is based on signal profiles that were found to have 
+                    a single modelled peak. A refrence run is assign by correlation anaylsis 
+                    and choosen based on a maximum R2 value. Then fraction-shifts per signal 
+                    profile is calculated (must be in the window given by *alignWindow*). 
+                    The fraction residuals are then modelled using the method provided in 
+                    *alignMethod*. Model peak centers are then adjusted based on the regression results. 
+                    Of note, the alignment is performed after peak-modelling and before distance calculations. 
+        
+        * alignWindow = 3, 
+                    Number of fraction +/- single-peal profile are accepted for the run alignment. 
+        
+        * analysisMode = "label-free", #[label-free,SILAC,SILAC-TMT]
+        
+        * analysisName = None,
+        
+        * binaryDatabase = False,
+        
+        * classifierClass = "random_forest",
+        
+        * classifierTestSize = 0.25, 
+                    Fraction of the created database containing positive and negative protein-protein 
+                    interactions that will be used for testing (for example ROC curve analysis) and classification report.
+        
+        * classiferGridSearch = RF_GRID_SEARCH. 
+                    Dict with keywords matching parameters/settings of estimator (SVM, random forest) 
+                    and list of values forming the grid used to find the best estimator settings (evaluated 
+                    by k-fold cross validation). Runtime is effected by number of parameter settings as well as k-fold. 
 
-       
+        * considerOnlyInteractionsPresentInAllRuns = 2, 
+                    Can be either bool to filter for protein - protein interactions that are present 
+                    in all runs. If an integer is provided. the pp interactions are filtered based on 
+                    the number of runs in which they were quantified. A value of 4 would indicate that 
+                    the pp interaction must have been predicted in all runs. 
+
+        * databaseFilter = {'Organism': ["Human"]}, 
+                    Filter dict used to find relevant complexes from database. By default, 
+                    the corum database is filtered based on the column 'Organism' using 'Mouse' as a search string. 
+                    If no filtering is required, pass an empty dict {}. 
+        * databaseIDColumn = "subunits(UniProt IDs)",
+        
+        * databaseFileName = "20190823_CORUM.txt",
+        
+        * databaseHasComplexAnnotations = True, 
+                    Indicates if the provided database does contain complex annotations. If you have a database with 
+                    only pairwise interactions, this setting should be *False*. Clusters are identified by dimensional 
+                    reduction and density based clustering (HDBSCAN). In order to alter UMAP and HDBSCAN settings use the 
+                    kewywords *hdbscanDefaultKwargs* and *umapDefaultKwargs*.
+        
+        * decoySizeFactor = 1.2,
+        
+        * grouping = {"WT": ["D3_WT_04.txt","D3_WT_02.txt"],"KO":["D3_KO_01.txt","D3_KO_02.txt"]}, 
+                None or dict. Indicates which samples (file) belong to one group. Let's assume 4 files with the name 
+                'KO_01.txt', 'KO_02.txt', 'WT_01.txt' and 'WT_02.txt' are being analysed. 
+                The grouping dict should like this : {"KO":[KO_01.txt','KO_02.txt'],"WT":['WT_01.txt','WT_02.txt']} 
+                in order to combine them for statistical testing (e.g. t-test of log2 transformed peak-AUCs). 
+                Note that when analysis multiple runs (e.g. grouping present) then calling ComplexFinder().run(X) - X must be a 
+                path to a folder containing the files.
+
+        
+        * hdbscanDefaultKwargs = {"min_cluster_size":4,"min_samples":1},
+        
+        * indexIsID = False,
+        
+        * idColumn = "Uniprot ID",
+        
+        * interactionProbabCutoff = 0.7
+            Cutoff for estimator probability. Interactions with probabilities below threshold will be removed.
+        
+        * kFold = 3
+            Cross validation of classifier optimiation.
+        
+        * maxPeaksPerSignal = 15
+            Number of peaks allowed for on signal profile.
+        
+        * maxPeakCenterDifference = 1.8
+        
+        * metrices = ["apex","pearson","euclidean","p_pearson","max_location","umap-dist"], Metrices to access distance between two profiles. Can be either a list of strings and/or dict. In case of a list of dicts, each dict must contain the keywords: 'fn' and 'name' providing a callable function with 'fn' that returns a single floating number and takes two arrays as an input.
+        
+        * metricesForPrediction = None
+        
+        * metricQuantileCutoff = 0.90
+        
+        * minDistanceBetweenTwoPeaks = 3 
+                Distance in fractions (int) between two peaks. Setting this to a smaller number results in more peaks.
+
+        * n_jobs = 12, 
+                Number of workers to model peaks, to calculate distance pairs and to train and use the classifer.
+
+        * noDatabaseForPredictions = False, 
+                If you want to use ComplexFinder without any database. Set this to *True*.
+
+        * normValueDict = {},
+
+        * peakModel = "GaussianModel", 
+                Indicates which model should be used to model signal profiles. In principle all models from lmfit can be used. 
+                However, the initial parameters are only optimized for GaussianModel and LaurentzianModel. 
+                This might effect runtimes dramatically. 
+
+        * plotSignalProfiles = False, 
+            If True, each profile is plotted against the fractio along with the fitted models. 
+            If you are concerned about time, you might set this to False at the cost of losing visible asessment of the fit quality.
+        
+        * plotComplexProfiles = False,
+        
+        * precision = 0.5
+            Precision to use to filter protein-protein interactions. 
+            If None, the filtering will be performed based on the parameter *interactionProbabCutoff*.
+        
+        * r2Thresh = 0.85 
+            R2 threshold to accept a model fit. Models below the threshold will be ignored.
+        
+        * removeSingleDataPointPeaks = True,
+        
+        * restartAnalysis = False, bool. 
+            Set True if you want to restart the anaylsis from scratch. If the tmp folder exsists, items and dirs will be deleted first.
+        
+        * retrainClassifier = False, 
+            Even if the trainedClassifier.sav file is found, the classifier is loaded and the training is skipped. 
+            If you change the classifierGridSearch, you should set this to True. 
+            This will ensure that the classifier training is never skipped.
+        
+        * recalculateDistance = False,
+        
+        * runName = None,
+        
+        * <del>savePeakModels = True</del> *depracted. always True and will be removed in the next version*.
+        
+        * scaleRawDataBeforeDimensionalReduction = True, 
+            If raw data should be used (*useRawDataForDimensionalReduction*) 
+            enable this if you want to scale them. Scaling will be performed that values of each row are scaled between zero and one.
+        
+        * smoothSignal = True
+            Enable/disable smoothing. Defaults to True. A moving average of at least 3 adjacent datapoints is calculated using 
+            pandas rolling function. Effects the analysis time as well as the nmaximal number of peaks detected.
+        
+        * smoothWindow = 2,
+        
+        * useRawDataForDimensionalReduction = False, Setting this to true, will force the pipeline to use the raw values for dimensional reduction. Distance calculations are not automatically turned off and the output is generated but they are not used.
+        
+        * umapDefaultKwargs = {"min_dist":0.0000001,"n_neighbors":3,"n_components":2},
+        
+        * quantFiles = [] list of str.
+            
         Returns
         -------
         None
@@ -1880,7 +2025,11 @@ class ComplexFinder(object):
                         data["diff:({})".format(resultColumnNames[n])] = np.nanmean(Y,axis=1) - np.nanmean(X,axis=1) 
                     elif len(columnNames1) == 1 or len(columnNames2) == 1:
                         data["diff:({})".format(resultColumnNames[n])] = np.nanmean(Y,axis=1) - np.nanmean(X,axis=1) 
-
+            if len(grouping) > 2:
+                testGroupData = [np.log2(data[groupNames].replace(0,np.nan).values) for groupNames in grouping.values()]
+                F,p = f_oneway(*testGroupData,axis=1)
+                data["-log10-p-value:(1W-ANOVA)"] = np.log10(p) * (-1)
+                data["Fvalue-1W-ANOVA)"] = F
 
             data.to_csv(txtOutput,sep="\t",index=False)
         else:

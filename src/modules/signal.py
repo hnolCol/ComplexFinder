@@ -26,6 +26,7 @@ class Signal(object):
             savePeakModels = True, 
             setMaxToOne = False,
             smoothSignal = True,
+            smoothRollingWindow = "auto",
             metrices = [], 
             pathToTmp = "", 
             removeSingleDataPointPeaks = True,
@@ -72,14 +73,16 @@ class Signal(object):
         self.r2Thresh = r2Thresh
         self.minDistanceBetweenTwoPeaks = minDistanceBetweenTwoPeaks
 
+        self.Rsquared = np.nan
         self.valid = True
+        self.validData = True
         self.validModel = True
         self.maxNumbPeaksUsed = False
     
         if removeSingleDataPointPeaks:
             self.Y = self._removeSingleDataPointPeaks()
         if smoothSignal:
-            self.Y = self.smoothSignal()
+            self.Y = self.smoothSignal(N = smoothRollingWindow)
         if normalizationValue is not None:
             self.Y = self.Y / normalizationValue
         elif setMaxToOne:
@@ -112,7 +115,7 @@ class Signal(object):
 
 
     def _removeSingleDataPointPeaks(self):
-        """Removes signal data where a peak would only be made it by one data point
+        """Removes signal data where a peak would only be made by one data point
 
         Parameters
         ----------
@@ -166,11 +169,11 @@ class Signal(object):
         if not valid:
             print("Signal {} is not valid.".format(self.ID))
             self.valid = False
+            self.validData = False
         return valid
 
     def _movingAverage(self,Y,N):
         ""
-
         if N == "auto":
             N = self._getN(Y)
         return pd.Series(Y).rolling(window=N,center=False, win_type = None).mean().fillna(0).values
@@ -248,7 +251,7 @@ class Signal(object):
                 name=prefix+'sigma', 
                 value = 0.255,
                 min = 0.05, 
-                max = 3.0)
+                max = 5.0)
 
         self._addParam(modelParams,
                 name=prefix+'center', 
@@ -261,8 +264,8 @@ class Signal(object):
             self._addParam(modelParams,
                 name=prefix+'gamma', 
                 value = 0,
-                min = -1, 
-                max = 1)
+                min = -2, 
+                max = 2)
 
     def _findParametersForModels(self,spec,peakIdx):
         modelComposite = None
@@ -345,36 +348,52 @@ class Signal(object):
 
         """
         if not self.isValid():
-            return {"id":self.ID}
+            return {"id":self.ID,"valid":False,"validData":False,"validModel":True}
         peakIdx = self.findPeaks()
         peakIdx = self._checkPeakIdx(peakIdx,self.maxPeaks)
         spec = self._generateSpec(np.arange(self.Y.size) , self.Y, N = peakIdx.size)
         modelComposite, params = self._findParametersForModels(spec,peakIdx)
         if modelComposite is None:
-            self.validModel = False
-            self.valid = False
-            return {"id":self.ID}
+            
+            return {"id":self.ID,"valid":False,"validData":True,"validModel":False}
         fitOutput = modelComposite.fit(self.Y, params, x=spec['x'], method="powell")
         r2 = self._calculateSquredR(fitOutput,spec)
+        self.Rsquared = r2 
         if r2 < self.r2Thresh:
             print("Model optimization did yield r2 below threshold ({}) for Signal {}".format(self.r2Thresh, self.ID))
-            self.validModel = False
-            self.valid = False
-            return {"id":self.ID}
+            
+            return {"id":self.ID,"valid":False,"validData":True,"validModel":False,"Rsquared":r2}
         if self.savePlots or self.savePeakModels:
         
             self.plotSummary(fitOutput,spec,r2,peakIdx)
         #save r2.
-        self.Rsquared = r2 
         self.fitOutput = fitOutput
         
-        return {"id":self.ID,"fitOutput":fitOutput,'spec':spec,'peakIdx':peakIdx}
+        return {"id":self.ID,"fitOutput":fitOutput,'spec':spec,'peakIdx':peakIdx, "valid":True,"validData":True,"validModel":True,"Rsquared":r2}
 
 
     def saveResults(self):
 
         self._collectPeakResults()
-        
+        self.saveTotalFitSignal()
+
+    def saveTotalFitSignal(self):
+        ""
+        Y = None
+        self.fitSignal = None
+        if hasattr(self,"fitOutput"):
+            components = self.fitOutput.eval_components(x=self.spec['x'])
+            for i, model in enumerate(self.spec['model']):
+                
+                prefix = f'm{i}_'
+                if Y is None:
+                    Y =  components[prefix].reshape(1,-1)
+                   
+                else:
+                    Y = np.append(Y,components[prefix].reshape(1,-1), axis=0) 
+            
+            self.fitSignal = np.sum(Y,axis=0) 
+            
     
     def _collectPeakResults(self):
         "Put results of peaks in a list"
@@ -435,6 +454,7 @@ class Signal(object):
 
     def plotSummary(self, fitOutput, spec, R, peakIdx):
         ""
+        
         components = fitOutput.eval_components(x=spec['x'])
         best_values = fitOutput.best_values
         pathToPlotFolder = os.path.join(self.pathToTmp,"result","modelPlots")

@@ -298,7 +298,6 @@ class Classifier(object):
         # classifier_.fit(X[train], Y[train])
         probas_ = optimizedClassifier.predict_proba(X_test)
         
-
         fpr, tpr, _ = roc_curve(y_test, probas_[:, 1])
         rocCurveData["FPR_{}".format(i)] = fpr
         rocCurveData["TPR_{}".format(i)] = tpr
@@ -341,9 +340,9 @@ class Classifier(object):
                             label=r'$\pm$ 1 std. dev.')
             plt.legend()
             if  pathToResults != '':
-                aucFile = os.path.join(pathToResults,"ROC curve.pdf")
+                aucFile = os.path.join(pathToResults,"ROC curve (testSize : {}).pdf".format(self.testSize))
             else:
-                aucFile = "ROC curve.pdf"
+                aucFile = "ROC curve (testSize : {}).pdf".format(self.testSize)
 
             plt.savefig(aucFile)
         else:
@@ -382,7 +381,7 @@ class Classifier(object):
                 v = np.concatenate([v,fill])
             rocData[k] = v
 
-        rocData.to_csv(os.path.join(pathToResults,"rocCurveData{}_{}.txt".format(str(metricColumns),self.classifierClass)),sep="\t")
+        rocData.to_csv(os.path.join(pathToResults,"rocCurveData{}_{}_{}.txt".format(str(metricColumns),self.classifierClass,self.testSize)),sep="\t")
 
         
 
@@ -409,6 +408,7 @@ class ComplexBuilder(object):
 
     def fit(self, X, metricColumns, scaler = None, inv = False, poolMethod="min", umapKwargs = {"min_dist":1e-7,"n_neighbors":4,"random_state":350}, generateSquareMatrix = True, preCompEmbedding = None, useSquareMatrixForCluster = False):
         ""
+        pooledDistances = None
         if X is not None and generateSquareMatrix and preCompEmbedding is None:
         #  print("Generate Square Matrix ..")
            # print(scaler)

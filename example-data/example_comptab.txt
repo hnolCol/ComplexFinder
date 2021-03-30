@@ -1,0 +1,5 @@
+	unique peptides	coverage	protein length	sample1	sample1	sample1	sample1	sample2	sample2	sample2	sample2
+	unique peptides	coverage	protein length	slice1	slice2	slice3	slice4	slice1	slice2	slice3	slice4
+prot1,prot4	5	55.5	108	6761	0	0	1255	62365	3162361	3262676	236236
+prot2	5	63.3	134	18651	117990	0	0	2089.9	23515	12515	125125
+prot3,prot5	5	34.1	196	51512	7673.1	26661	99983	2315613	12516	16536	75477

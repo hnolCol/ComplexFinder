@@ -1,7 +1,8 @@
 import os 
 import shutil 
 import numpy as np
-from .Database import DistanceCalculator
+from .Distance import DistanceCalculator
+import pickle 
 
 def calculateDistanceP(pathToFile):
     """

@@ -25,6 +25,7 @@ class DistanceCalculator(object):
                     chunkName = '', 
                     embedding = [], 
                     Ys = None,
+                    correlationWindowSize = 4,
                     otherSignalEmbeddings = []):
         """Signal-centric Distance Calculator.
 
@@ -74,7 +75,7 @@ class DistanceCalculator(object):
         self.pathToTmp = pathToTmp
         self.embedding = embedding
         self.otherSignalEmbeddings = otherSignalEmbeddings
-
+        self.correlationWindowSize = correlationWindowSize
         Ys = np.load(os.path.join(pathToTmp,"source.npy"),allow_pickle=True)
         boolIdx = np.isin(Ys[:,0],E2)
         Ys = Ys[boolIdx]
@@ -158,6 +159,12 @@ class DistanceCalculator(object):
         """
         return [1-spearmanr(Y,self.Y)[0] for Y in self.Ys]
 
+    def rollingCorrelation(self):
+        ""
+        YSignal = pd.Series(self.Y)
+        rollingPearson =  pd.Series([1-YSignal.rolling(self.correlationWindowSize).corr(pd.Series(Y)).max() for Y in self.Ys]).replace([np.inf, -np.inf, np.nan], 1)
+        return rollingPearson
+
     def calculateMetrices(self):
         """
         Calculates metrices between the signal Y and other signals Ys.
@@ -197,6 +204,11 @@ class DistanceCalculator(object):
             elif metric == "euclidean":
 
                 collectedDf["euclidean"] = self.euclideanDistance()
+            
+            elif metric == "rollingCorrelation":
+
+                collectedDf["rollingCorrelation"] = self.rollingCorrelation()
+                collectedDf["rollingCorrelation"] = collectedDf["rollingCorrelation"].replace([np.inf, -np.inf, np.nan], 2)
                     
             elif metric == "apex":
             

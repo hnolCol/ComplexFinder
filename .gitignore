@@ -130,5 +130,7 @@ dmypy.json
 
 example-data/old
 example-data/TMEM70
-src/BiasedSelection.txt
-src/BiasedSel.txt
+results/
+reference-data/20190823_CORUM.txt
+reference-data_
+src/modules/utils/

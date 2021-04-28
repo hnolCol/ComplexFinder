@@ -1,15 +1,15 @@
 
-
-
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.svm import SVC
-from sklearn.model_selection import GridSearchCV
-from sklearn.model_selection import train_test_split
+from sklearn.svm import SVC 
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import roc_curve, auc
+from sklearn.metrics import roc_curve, auc, fbeta_score, make_scorer
 from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit
 from sklearn.naive_bayes import GaussianNB
-from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import StackingClassifier, GradientBoostingClassifier, RandomForestClassifier
+
+
 
 from imblearn.ensemble import BalancedRandomForestClassifier
 import numpy as np
@@ -97,7 +97,8 @@ class Classifier(object):
             return RandomForestClassifier(n_estimators=200,
                                         oob_score=True,
                                         min_samples_split=2,
-                                        n_jobs=self.n_jobs)
+                                        n_jobs=self.n_jobs,
+                                        random_state=42)
                                                         
                                 # RandomForestClassifier(n_estimators=200,BalancedRandomForestClassifier
                                 #             oob_score=True,
@@ -107,9 +108,20 @@ class Classifier(object):
             
             return SVC(gamma=2, C=1, probability=True)
 
+        elif self.classifierClass == "GradientBoost":
+
+            return GradientBoostingClassifier(n_estimators=200, random_state=42)
+
         elif self.classifierClass == "GaussianNB":
 
             return GaussianNB()
+        
+        elif self.classifierClass == "StackedClassifiers":
+            estimators = [("rf",RandomForestClassifier(n_estimators=100, random_state=42)),
+                          ("NB",GaussianNB()),
+                          ("SVM",SVC(gamma=2, C=1, probability=True))]
+
+            return StackingClassifier(estimators)
 
         else:
             raise ValueError("Argument `classifierClass` is not known.")
@@ -155,19 +167,18 @@ class Classifier(object):
         Best estimator found by the grid search.
 
         """
+        ftwo_scorer = make_scorer(fbeta_score, beta=2)
         gridSearch = GridSearchCV(self.classifier, 
                                     scoring = "f1", 
                                     param_grid = self.gridSerach, 
                                     n_jobs = self.n_jobs, 
-                                    cv = 5, 
-                                    verbose=2,
+                                    cv = 4, 
+                                    verbose=1,
                                     refit = True)
 
         gridSearch.fit(X,Y)
 
-        print("Info :: The maximal F1 Score was found to be: {}".format(gridSearch.best_score_))
-
-       # self.bestClassifier = gridSearch.best_estimator_
+        print("Info :: The maximal F(beta=2) Score was found to be: {}".format(gridSearch.best_score_))
 
         return gridSearch.best_estimator_, gridSearch.best_params_
 
@@ -259,8 +270,6 @@ class Classifier(object):
         """
         print("Info :: Predictor training started")
         X = self._scaleFeatures(X)
-        #pd.DataFrame(X).to_csv("SCALED_FEATURES.txt")
-
 
         X_train, X_test, y_train, y_test = train_test_split(X,Y,stratify=Y,test_size=self.testSize)
 
@@ -271,13 +280,12 @@ class Classifier(object):
             optimizedClassifier, optimizedParams = self._gridOptimization(X_train,y_train)
         else:
             print("Info :: Grid serach skipped. Automatically skipped when using Guassian NB or parameter 'classiferGridSearch' is None.")
-
+            optimizedClassifier = self.classifier
         #cv = StratifiedShuffleSplit(n_splits=10, test_size=0.2)
         if optimizedParams is not None:
             print("Info : Optimized parameters")
             print(optimizedParams)
-        
-        
+
         self.predictors = [optimizedClassifier]
         probasOut = optimizedClassifier.predict_proba(X) 
         #predict probabiliteis for complete data set to create a classfier report.
@@ -288,14 +296,6 @@ class Classifier(object):
         fig, ax = plt.subplots()
         i=0
         
-        #for train, test in [()]
-       
-        #probasOut = classifier_.predict_proba(X)
-        # if optimizedParams is not None:
-        #     classifier_.set_params(**optimizedParams)
-        
-
-        # classifier_.fit(X[train], Y[train])
         probas_ = optimizedClassifier.predict_proba(X_test)
         
         fpr, tpr, _ = roc_curve(y_test, probas_[:, 1])
@@ -309,35 +309,35 @@ class Classifier(object):
                 label='ROC fold %d (AUC = %0.2f)' % (i, roc_auc))
         i+=1
 
-    
-        if len(self.predictors) == 1:
-            oobScore = np.mean([optimizedClassifier.oob_score_ for classifier in self.predictors])
-        else:
-            oobScore = optimizedClassifier.oob_score_
+        if all(hasattr(est,"oob_score_") for est in self.predictors):
+            if len(self.predictors) == 1:
+                oobScore = np.mean([optimizedClassifier.oob_score_ for classifier in self.predictors])
+            else:
+                oobScore = optimizedClassifier.oob_score_
 
         print("Info :: Predictor {} training done.".format(self.classifierClass))
         if plotROCCurve:
-            #plotting
+            #plotting change line
             ax.plot(    [0, 1], 
                         [0, 1], 
                         linestyle='--', 
                         lw=2, color='r',
                         label='Chance', 
                         alpha=.8)
-
+    
             mean_tpr = np.mean(tprs, axis=0)
             mean_tpr[-1] = 1.0
             mean_auc = auc(mean_fpr, mean_tpr)
             std_auc = np.std(aucs)
             ax.plot(mean_fpr, mean_tpr, color='b',
-                    label=r'Mean ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, std_auc),
+                    label=r'ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, std_auc),
                     lw=2, alpha=.8)
 
-            std_tpr = np.std(tprs, axis=0)
-            tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
-            tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
-            ax.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=.2,
-                            label=r'$\pm$ 1 std. dev.')
+            # std_tpr = np.std(tprs, axis=0)
+            # tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
+            # tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
+            # ax.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=.2,
+            #                 label=r'$\pm$ 1 std. dev.')
             plt.legend()
             if  pathToResults != '':
                 aucFile = os.path.join(pathToResults,"ROC curve (testSize : {}).pdf".format(self.testSize))
@@ -406,26 +406,42 @@ class ComplexBuilder(object):
         self.clustering.set_params(**params) 
 
 
-    def fit(self, X, metricColumns, scaler = None, inv = False, poolMethod="min", umapKwargs = {"min_dist":1e-7,"n_neighbors":4,"random_state":350}, generateSquareMatrix = True, preCompEmbedding = None, useSquareMatrixForCluster = False):
-        ""
+    def fit(self, 
+                X, 
+                metricColumns, 
+                scaler = None, 
+                inv = False, 
+                poolMethod="min", 
+                umapKwargs = {"min_dist":1e-7,"n_neighbors":4,"random_state":350}, 
+                generateSquareMatrix = True, 
+                preCompEmbedding = None, 
+                useSquareMatrixForCluster = False,
+                entryColumns = ["E1","E2"]):
+        """
+        Fits predicted interactions to potential macromolecular complexes.
+
+
+        """
         pooledDistances = None
         if X is not None and generateSquareMatrix and preCompEmbedding is None:
         #  print("Generate Square Matrix ..")
            # print(scaler)
-            X, labels, pooledDistances = self._makeSquareMatrix(X, metricColumns, scaler, inv,  poolMethod)
+            X, labels, pooledDistances = self._makeSquareMatrix(X, metricColumns, scaler, inv,  poolMethod, entryColumns)
            # print(X)
             print("Info :: Umap calculations started.")
-            embed = umap.UMAP(metric="precomputed", **umapKwargs).fit_transform(X)
+            umapKwargs["metric"] = "precomputed"
+            embed = umap.UMAP(**umapKwargs).fit_transform(X)
         elif preCompEmbedding is not None:
             embed = preCompEmbedding.values
             labels = preCompEmbedding.index.values
             pooledDistances = None
+            print("Info :: Aligned UMAP was precomputed. ")
         elif not generateSquareMatrix:
             labels = X.index.values
-                
+            umapKwargs["metric"] = "correlation"
             embed = umap.UMAP(**umapKwargs).fit_transform(X)
         else:
-            raise ValueError("X and alternativeData are both None. No data for UMAP.")
+            raise ValueError("X and preCompEmbedding are both None. No data for UMAP.")
 
       #  print("done .. - starting clustering")
         if self.method == "OPTICS":
@@ -443,8 +459,8 @@ class ComplexBuilder(object):
            # self.clustering.condensed_tree_.to_pandas()
             return clusterResult.labels_ , labels, X, clusterResult.probabilities_, ["None"] * labels.size, embed, pooledDistances
         
-    def _makeSquareMatrix(self, X, metricColumns, scaler, inv,  poolMethod):
-        import time
+    def _makeSquareMatrix(self, X, metricColumns, scaler, inv,  poolMethod, entryColumns):
+        
         if scaler is None:
             if poolMethod == "mean":
                 X["meanDistance"] = X[metricColumns].mean(axis=1)
@@ -462,16 +478,17 @@ class ComplexBuilder(object):
             
         if inv:
             X['meanDistance'] = 1 - X['meanDistance']
+           
         
         X = X.dropna(subset=["meanDistance"])
 
-        uniqueValues = np.unique(X[["E1","E2"]])
+        uniqueValues = np.unique(X[entryColumns])
         uniqueVDict = dict([(value,n) for n,value in enumerate(uniqueValues)])
         nCols = nRows = uniqueValues.size 
         print("Info :: Creating {} x {} distance matrix".format(nCols,nCols))
         matrix = np.full(shape=(nRows,nCols), fill_value = 2.0 if scaler is not None else 1.0)
-        
-        for row in X[["E1","E2","meanDistance"]].values:
+        columnNames = entryColumns+["meanDistance"]
+        for row in X[columnNames].values:
             
             nRow = uniqueVDict[row[0]]
             nCol = uniqueVDict[row[1]]

@@ -31,10 +31,12 @@ class Signal(object):
             pathToTmp = "", 
             removeSingleDataPointPeaks = True,
             normalizationValue = None,
+            minPeakHeightOfMax = 0,
             otherSignals = [],
             analysisName = "",
             r2Thresh = 0.0,
-            minDistanceBetweenTwoPeaks = 3):
+            minDistanceBetweenTwoPeaks = 3,
+            avoidWideSmallPeaks = True):
         
         """Signal module for pre-processing and modeling
 
@@ -72,13 +74,15 @@ class Signal(object):
         self.otherSignals = otherSignals
         self.r2Thresh = r2Thresh
         self.minDistanceBetweenTwoPeaks = minDistanceBetweenTwoPeaks
-
+        self.minPeakHeightOfMax = minPeakHeightOfMax
         self.Rsquared = np.nan
         self.valid = True
         self.validData = True
         self.validModel = True
         self.maxNumbPeaksUsed = False
-    
+        self.avoidWideSmallPeaks = avoidWideSmallPeaks 
+        self.inputY = self.Y.copy()
+        #self.modelledPeaks = []
         if removeSingleDataPointPeaks:
             self.Y = self._removeSingleDataPointPeaks()
         if smoothSignal:
@@ -172,17 +176,17 @@ class Signal(object):
             self.validData = False
         return valid
 
-    def _movingAverage(self,Y,N):
+    def _movingMean(self,Y,N):
         ""
         if N == "auto":
             N = self._getN(Y)
-        return pd.Series(Y).rolling(window=N,center=False, win_type = None).mean().fillna(0).values
+        return pd.Series(Y).rolling(window=N, center=True, win_type = 'triang').mean().fillna(0).values
 
     def smoothSignal(self,method='moving average',N="auto"):
         ""
 
         if method == "moving average":
-            return self._movingAverage(self.Y,N)
+            return self._movingMean(self.Y,N)
         
     
     def findPeaks(self,cwt=False,widths=[2,3,4]):
@@ -190,7 +194,7 @@ class Signal(object):
         if cwt:
             peakDetection = sciSignal.find_peaks_cwt(self.Y,widths)
         else:
-            peakDetection, _ = sciSignal.find_peaks(self.Y, distance = self.minDistanceBetweenTwoPeaks)
+            peakDetection, _ = sciSignal.find_peaks(self.Y, distance = self.minDistanceBetweenTwoPeaks, height = self.minPeakHeightOfMax * np.nanmax(self.Y))
 
         return peakDetection
 
@@ -241,31 +245,49 @@ class Signal(object):
         None
 
         """
-        self._addParam(modelParams,
-                            name=prefix+'amplitude',
-                            max = self.Y[peakIdx[i]] * 9,
-                            value = self.Y[peakIdx[i]] * 2,
-                            min = self.Y[peakIdx[i]] * 1.2)
+        
+        
 
-        self._addParam(modelParams,
+        if self.avoidWideSmallPeaks and self.Y[peakIdx[i]] < np.max(self.Y) * 0.2:
+            #small peaks should not be to wide! 
+            self._addParam(modelParams,
+                            name=prefix+'amplitude',
+                            max = self.Y[peakIdx[i]] * 2 * np.pi,
+                            value = self.Y[peakIdx[i]] * 0.25 * np.pi,
+                            min = self.Y[peakIdx[i]] * 0.01 * np.pi)
+            
+            self._addParam(modelParams,
+                        name=prefix+'sigma', 
+                        value = 0.255,
+                        min = 0.01, 
+                        max = 2.5)
+        else:
+
+            self._addParam(modelParams,
+                            name=prefix+'amplitude',
+                            max = self.Y[peakIdx[i]] * 3.5 * np.pi,
+                            value = self.Y[peakIdx[i]] * 0.25 * np.pi,
+                            min = self.Y[peakIdx[i]] * 0.05 * np.pi)
+
+            self._addParam(modelParams,
                 name=prefix+'sigma', 
                 value = 0.255,
-                min = 0.05, 
-                max = 5.0)
+                min = 0.06, 
+                max = 3.0)
 
         self._addParam(modelParams,
                 name=prefix+'center', 
                 value = peakIdx[i],
-                min = peakIdx[i] - 0.2, 
-                max = peakIdx[i] + 0.2)
+                min = peakIdx[i] - 0.35, 
+                max = peakIdx[i] + 0.35)
 
         if self.peakModel == "SkewedGaussianModel":
             
             self._addParam(modelParams,
                 name=prefix+'gamma', 
                 value = 0,
-                min = -2, 
-                max = 2)
+                min = -2.5, 
+                max = 2.5)
 
     def _findParametersForModels(self,spec,peakIdx):
         modelComposite = None
@@ -361,7 +383,6 @@ class Signal(object):
         self.Rsquared = r2 
         if r2 < self.r2Thresh:
             print("Model optimization did yield r2 below threshold ({}) for Signal {}".format(self.r2Thresh, self.ID))
-            
             return {"id":self.ID,"valid":False,"validData":True,"validModel":False,"Rsquared":r2}
         if self.savePlots or self.savePeakModels:
         
@@ -408,18 +429,42 @@ class Signal(object):
 
         self.modelledPeaks = []
         best_values = self.fitOutput.best_values
+        components = self.fitOutput.eval_components(x=self.spec['x'])
+        AUCs = [np.trapz(components[f'm{i}_'],dx = 0.15) for i,_ in enumerate(self.spec['model'])]
+        sumAUC = np.sum(AUCs)
+        reltiveAUC = [x/sumAUC for x in AUCs]
+        
         for i, model in enumerate(self.spec['model']):
             params = {}
             prefix = f'm{i}_'
             params['ID'] = i
             params["mu"] = best_values[prefix+"center"]
             params["sigma"] = best_values[prefix+"sigma"]
+            params["A"] = best_values[prefix+"amplitude"]
             params["height"] = self._getHeight(best_values,prefix) 
             params["fwhm"] = self._getFWHM(best_values,prefix) 
             params["E"] = self.ID
+            params["AUC"] = AUCs[i]
+            params["relAUC"] = reltiveAUC[i]
+            params["Y"] = np.array(components[prefix]).flatten().astype(np.float32)
+            if self.peakModel == "SkewedGaussianModel":
+                params["gamma"] = best_values[prefix+"gamma"]
+            
             self.modelledPeaks.append(params)
 
         return self.modelledPeaks
+
+    def getPeaksAndsIDs(self):
+        ""
+        if hasattr(self,"peaksAndIds"):
+            return self.peaksAndIds
+        A = np.empty(shape = (len(self.modelledPeaks),2))
+        IDs = np.empty(shape=len(self.modelledPeaks),dtype=np.object)
+        for n,p in enumerate(self.modelledPeaks):
+            A[n,:] = [p["mu"],p["sigma"]]
+            IDs[n] = p["ID"]
+        self.peaksAndIds = {"peaks":A.astype(np.float64),"IDs":IDs}
+        return self.peaksAndIds
 
     def _calculateSquredR(self,model = None, spec= None):
         ""
@@ -455,13 +500,15 @@ class Signal(object):
     def plotSummary(self, fitOutput, spec, R, peakIdx):
         ""
         
-        components = fitOutput.eval_components(x=spec['x'])
-        best_values = fitOutput.best_values
-        pathToPlotFolder = os.path.join(self.pathToTmp,"result","modelPlots")
-        if not os.path.exists(pathToPlotFolder):
-            os.mkdir(pathToPlotFolder)
+        
+        
             
         if self.savePlots:
+            components = fitOutput.eval_components(x=spec['x'])
+            best_values = fitOutput.best_values
+            pathToPlotFolder = os.path.join(self.pathToTmp,"result","modelPlots")
+            if not os.path.exists(pathToPlotFolder):
+                os.mkdir(pathToPlotFolder)
             fileName = "{}_{}.pdf".format(self.analysisName,self.ID)
             pathToSaveFigure = os.path.join(pathToPlotFolder,fileName)
             fig, ax = plt.subplots()
@@ -492,7 +539,8 @@ class Signal(object):
                         )                                            
                                            
 
-            ax.plot(spec['x'],self.Y , color="black" , linestyle="--", linewidth=0.5)
+            ax.plot(spec['x'],self.Y , color="black" , linestyle="--", linewidth=0.5, label = "filteredAndSmoothedSignal")
+            ax.plot(spec['x'],self.inputY , color="blue" , linestyle="-", linewidth=0.5, label = "rawSignal")
             for peak in peakIdx:
                 ax.axvline(peak, color="darkgrey",linestyle="--",linewidth=0.1)
             ax.set_title("R^2:{}".format(round(R,3)))
@@ -501,39 +549,39 @@ class Signal(object):
             plt.savefig(pathToSaveFigure)
             plt.close()
 
-        if self.savePeakModels:
-            pathToTxt = os.path.join(pathToPlotFolder,"{}_{}_r2_{}.txt".format(self.analysisName,self.ID,round(R,3)))
-            AUCs = [np.trapz(components[f'm{i}_'],dx = 0.15) for i,_ in enumerate(spec['model'])]
-            sumAUC = np.sum(AUCs)
-            reltiveAUC = [x/sumAUC for x in AUCs]
-            with open(pathToTxt , "w") as f:
-                if self.peakModel == "SkewedGaussianModel":
-                    f.write("\t".join(["Key","ID","Amplitude","Center","Sigma","Gamma","fwhm","height","auc","relAUC"] + [str(x) for x in spec["x"]])+"\n")
-                else:
-                    f.write("\t".join(["Key","ID","Amplitude","Center","Sigma","fwhm","height","auc","relAUC"] + [str(x) for x in spec["x"]])+"\n")
-                for i, model in enumerate(spec['model']):
-                    prefix = f'm{i}_'
-                    if self.peakModel == "SkewedGaussianModel":
-                        f.write("\t".join([str(x) for x in [self.ID,
-                                    i,
-                                    round(best_values[prefix+"amplitude"],3),
-                                    round(best_values[prefix+"center"],2),
-                                    round(best_values[prefix+"sigma"],3),
-                                    round(best_values[prefix+"gamma"],3),
-                                    round(self._getFWHM(best_values,prefix) ,3),
-                                    round(self._getHeight(best_values,prefix),3),
-                                    round(AUCs[i],3),
-                                    round(reltiveAUC[i],3)] + components[prefix].tolist()])+"\n")
-                    else:
-                        f.write("\t".join([str(x) for x in [self.ID,
-                                    i,
-                                    round(best_values[prefix+"amplitude"],3),
-                                    round(best_values[prefix+"center"],2),
-                                    round(best_values[prefix+"sigma"],3),
-                                    round(self._getFWHM(best_values,prefix) ,3),
-                                    round(self._getHeight(best_values,prefix),3),
-                                    round(AUCs[i],3),
-                                    round(reltiveAUC[i],3)] + components[prefix].tolist()])+"\n")
+        # if False and self.savePeakModels:
+        #     pathToTxt = os.path.join(pathToPlotFolder,"{}_{}_r2_{}.txt".format(self.analysisName,self.ID,round(R,3)))
+        #     AUCs = [np.trapz(components[f'm{i}_'],dx = 0.15) for i,_ in enumerate(spec['model'])]
+        #     sumAUC = np.sum(AUCs)
+        #     reltiveAUC = [x/sumAUC for x in AUCs]
+        #     with open(pathToTxt , "w") as f:
+        #         if self.peakModel == "SkewedGaussianModel":
+        #             f.write("\t".join(["Key","ID","Amplitude","Center","Sigma","Gamma","fwhm","height","auc","relAUC"] + [str(x) for x in spec["x"]])+"\n")
+        #         else:
+        #             f.write("\t".join(["Key","ID","Amplitude","Center","Sigma","fwhm","height","auc","relAUC"] + [str(x) for x in spec["x"]])+"\n")
+        #         for i, model in enumerate(spec['model']):
+        #             prefix = f'm{i}_'
+        #             if self.peakModel == "SkewedGaussianModel":
+        #                 f.write("\t".join([str(x) for x in [self.ID,
+        #                             i,
+        #                             round(best_values[prefix+"amplitude"],3),
+        #                             round(best_values[prefix+"center"],2),
+        #                             round(best_values[prefix+"sigma"],3),
+        #                             round(best_values[prefix+"gamma"],3),
+        #                             round(self._getFWHM(best_values,prefix) ,3),
+        #                             round(self._getHeight(best_values,prefix),3),
+        #                             round(AUCs[i],3),
+        #                             round(reltiveAUC[i],3)] + components[prefix].tolist()])+"\n")
+        #             else:
+        #                 f.write("\t".join([str(x) for x in [self.ID,
+        #                             i,
+        #                             round(best_values[prefix+"amplitude"],3),
+        #                             round(best_values[prefix+"center"],2),
+        #                             round(best_values[prefix+"sigma"],3),
+        #                             round(self._getFWHM(best_values,prefix) ,3),
+        #                             round(self._getHeight(best_values,prefix),3),
+        #                             round(AUCs[i],3),
+        #                             round(reltiveAUC[i],3)] + components[prefix].tolist()])+"\n")
 
 
     def __getstate__(self):

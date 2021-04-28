@@ -1,8 +1,31 @@
 # ComplexFinder
- Finds complexes from Blue-Native and SEC Fractionation analyzed by Liquid Chromatogrpahy coupled to Mass Spectrometry. In 
- principal it works with any separation technique resulting in co-elution profiles are available. 
 
- ## Workflow
+ Finds complexes from Blue-Native and SEC Fractionation analyzed by Liquid Chromatogrpahy coupled to Mass Spectrometry. In 
+ principal it works with any separation technique resulting in co-elution signal profiles. To avoid licence issues and accumulation of old database files, please first download the database of choce (see below *Download Protein-Protein Interaction Data*). 
+
+## Next Feature (Testing) Implementations (05.2021)
+
+- [ ] Extend plotting capabibilties to extract profiles of features and complex
+```python
+
+#plotting selected feature's profile
+ComplexFinder(analysisName="<Created folder in results folder>").plotFeature()
+
+#plotting selected feature's distance metrics compared to the complete population (all features)
+#due to scaling of features prior training of the predictor, boxplot should display scaled and raw features.
+ComplexFinder(analysisName="<Created folder in results folder>").plotFeatureDistanceMetircs()
+
+#plotting features of complex found by ComplexFinder (clusterLabels == ID)
+ComplexFinder(analysisName="<Created folder in results folder>").plotComplexProfileByClusterLabel()
+
+#plotting features of known complex in database (correspondng to ComplexID column in the database - see below)
+ComplexFinder(analysisName="<Created folder in results folder>").plotComplexProfileInDatabaseByID() 
+
+```
+- [ ] Test a DeepLearning Implementation
+
+
+## Workflow
 
 For thousdands of features (peptides/protein) a signal was measured over different fractions. The applied technique separates protein clusters from each other. This package aims for different things:
 
@@ -11,17 +34,27 @@ For thousdands of features (peptides/protein) a signal was measured over differe
 * identification of protein-protein interactions.
 * identification of protein cluster using diminesional reduction and density based clustering. 
 
- ![Signal processing and protein-protein interaction prediction](/img/workflow.png)
+![Signal processing and protein-protein interaction prediction](/img/workflow.png)
 
+Importantly, ComplexFinder can also be utized to analyse the data without prior knowledge of protein connectivitiy (e.g. positive database). In this case, there are two options: 
 
-As a next step, we want to identify clusters. To this end, we are using the interaction probabiliy matrix obtained by the
-random forest classifier. To this end, we are calculating the UMAP embedding and apply HDBSCAN clustering. Again, we 
-are using the CORUM database to quantify the the clustering result. Both techniques, UMAP and HDBSCAN are performed 
+* using raw profile signal intensities
+* distance between profile pairs 
+
+which are then subjected for dimensional reduction and HDBSCAN clusering. Importantly, when using the raw profile intensities, the derived UMAP representation is aligned using the top N correlated features between samples (e.g. same protein across all samples). 
+
+As a next step, we want to identify clusters of proteins with predicted interaction. To this end, we are using the interaction probabiliy matrix obtained by the
+random forest classifier. We then apply the UMAP embedding calculton and apply HDBSCAN clustering. Again, we 
+are using the CORUM database to quantify the the clustering result using the v-measure. Both techniques, UMAP and HDBSCAN are performed 
 using a paramter grid to cycle through different options and find the best clustering. 
-The rating of the clustering takes into account, the number of correct protein-protein interactions (defined by CORUM database), the total number of protein-protein interactions (basically the amount of noise found by HDBSCAN). 
 
  ![Quantification](/img/quantDetails.png)
 
+ In cases of uisng the raw signal intensity or the distance metrics, those data are subjected to dimensional reduction (UMAP) and clustering (HDBSCAN). Noteworthy, other clusering algorithmns are available and can be utilized. HDBSCAN is however the default. 
+
+## Depositing Data analyzed using ComplexFinder
+
+If you analyzed your data using ComplexFinder, we highly recommend to upload the data along the raw fiiles deposition at mass spectrometry repisatories such as PRIDE / ProteomeXChange or similiar. Especially, the params.json file which is written to the results folder is of particular interest in order to reproduce the data analysis. Of note, if you upload the complete result folder, other users will be able to analyse these data using the plotting utilities of ComplexFinder.
 
 ## Installation
 
@@ -59,15 +92,100 @@ You can also pass a folder path to run. This will yield in the anaylsis of each 
 
 ```python
 import os
-from main import ComplexFinder
+from .src.main import ComplexFinder
 folderPath = os.path(".","<my folder>")
 ComplexFinder().run(folderPath)
 ```
 Additionally, you can pass a list of datasets. However, we  recommend to copy required datasets in a separate folder.
+Results are saved by default in the results folder the ComplexFinder folder.
+
+## Download Protein-Protein Interaction Data
+
+To run the ComplexFinder pipeline, you have to provide a positive set protein-protein interactions.
+Below we provide examples and specific settings for frequently used databases of protein-protein interactions.
+
+### CORUM
+
+Download the dataset from the [Website link](https://mips.helmholtz-muenchen.de/corum/) and save it to reference-data folder in ComplexFinder.
+If not present, add a column with the header ComplexID providing a unique ID for each complex.
+The CORUM database contains complexes for mammalian systems therefore we need to pass a filterDictionary as shown below (databaseFilter). 
+You can pass any column of the database as the key, and the target value for which we want to filter as a list. 
+The parameter databaseEntrySplitString gives the splitstring by which the Uniprot identifiers (or any other feature ID matching your input data) of complexes are separated.
+
+```python
+ComplexFinder(
+    ...
+    databaseFilter = {'Organism': ["Human"]},
+    databaseIDColumn = "subunits(UniProt IDs)",
+    databaseEntrySplitString = ";", 
+    databaseFileName = "CORUM.txt" #depends on how you save the COURM database
+    ).run(...)
+```
+
+### Complex Portal 
+
+Go the [Complex Portal Website](https://www.ebi.ac.uk/complexportal/home) and download the database (save it as HUMAN_COMPLEX_PORTAL.txt) for the utilized organismn. 
 
 
+```python
+ComplexFinder(
+    databaseFileName="HUMAN_COMPLEX_PORTAL.txt", #depends on how you save the Complex Portal database
+    databaseIDColumn= "Expanded participant list",
+    databaseEntrySplitString = "|",              
+    databaseFilter = {}
+    ).run(...)
+
+```
+
+
+### hu.Map 2.0 
+
+The hu.MAP 2.0 has recently beend published and is available at this [link](http://humap2.proteincomplexes.org).
+
+```python
+ComplexFinder(
+    databaseFileName="humap2.txt", #depends on how you save the Complex Portal database
+    databaseIDColumn= "subunits(UniProt IDs)", #requires renaming
+    databaseEntrySplitString = ";",              
+    databaseFilter = {"Confidence":[1,2,3,4]} #example to filter for a spcific complex confidence
+    ).run(...)
+
+```
+
+## Grouping of Replicates
+
+The grouping parameter in ComplexFinder is used to group files, which is used to group replicates together. 
+Assume, that we have 4 files, 2 KO and 2 WT files which we put together in the folder "./data". 
+The grouping will be used to calculate pariwise statistics between fitted peaks. Moreover, complex prediction and protein-protein prediction summary.
+```python
+pathToFiles = os.path.join(".","data")
+ComplexFinder(
+    grouping = {
+        "WT" : ["D3_WT_01.txt","D3_WT_02.txt"],
+        "KO" : ["D3_KO_01.txt","D3_KO_02.txt"]
+    }
+            ).run(pathToFiles)
+```
+
+
+## Using ComplexFinder without protein connectivity
+
+### Using raw signal profiles
+
+
+### Using distances metrics
+
+
+#### Using just the apex distance 
+
+
+
+Please respect the respective liscence for the different databases.
 
 ## Parameters
+
+- [ ] requires updating for new parameters and additional documentation.
+
 Find below parameters to set. The default is given in brackets after the parameter name.
 * alignMethod = "RadiusNeighborsRegressor",
 * alignRuns = False, Alignment of runs is based on signal profiles that were found to have a single modelled peak. A refrence run is assign by correlation anaylsis and choosen based on a maximum R2 value. Then fraction-shifts per signal profile is calculated (must be in the window given by *alignWindow*). The fraction residuals are then modelled using the method provided in *alignMethod*. Model peak centers are then adjusted based on the regression results. Of note, the alignment is performed after peak-modelling and before distance calculations. 
@@ -109,10 +227,13 @@ Find below parameters to set. The default is given in brackets after the paramet
 * retrainClassifier = False, if the trainedClassifier.sav file is found, the classifier is loaded and the training is skipped. If you change the classifierGridSearch, you should set this to True. This will ensure that the classifier training is never skipped.
 * recalculateDistance = False,
 * runName = None,
+* rollingWinType = "triang", the win type used for calculating the rolling metric. If None, all points are evenly weighted. Can be any string of scipy.signal window function.
+            (https://docs.scipy.org/doc/scipy/reference/signal.windows.html#module-scipy.signal.windows)
 * <del>savePeakModels = True</del> *depracted. always True and will be removed in the next version*.
 * scaleRawDataBeforeDimensionalReduction = True, If raw data should be used (*useRawDataForDimensionalReduction*) enable this if you want to scale them. Scaling will be performed that values of each row are scaled between zero and one.
 * smoothSignal = True, Enable/disable smoothing. Defaults to True. A moving average of at least 3 adjacent datapoints is calculated using pandas rolling function. Effects the analysis time as well as the nmaximal number of peaks detected.
 * smoothWindow = 2,
+* topNCorrFeaturesForUMAPAlignment = 200, Using top N features to to align UMAP Embeddings. The features are ranked by using Pearson correlation coefficient,
 * useRawDataForDimensionalReduction = False, Setting this to true, will force the pipeline to use the raw values for dimensional reduction. Distance calculations are not automatically turned off and the output is generated but they are not used.
 * umapDefaultKwargs = {"min_dist":0.0000001,"n_neighbors":3,"n_components":2},
 * quantFiles = [] list of str.
@@ -129,7 +250,18 @@ RF_GRID_SEARCH = {
 
 Sklearn library is used for predictions. Please check the comprehensive [documention](https://scikit-learn.org/stable/user_guide.html) for more details and for construction of a grid search dict. 
 
- # Frequently asked questions
+# Database Quality
+
+For the prediction of protein-protein interactions the quality and size of the database is of importance. 
+
+As a quick test, we performed predictions using 2000 randomly selected features of dataset D1 and siwtched the class labels (interactor vs non-interactor) of the database to train the classifier. We observed that the number of predicted protein-protein interaction was strongly reduced in after label switch of more than 5% of the features. We have used the CORUM human database for interactions. This highlights that the complexes in the database need to describe the complexome in the measured dataset accurately. The gold-standard is therefore the usage of a complex database that were experimentally validated, which is sadly often not possible due to the workload.
+
+
+# Usin SILAC - TMT peak centric quantifiaction
+
+*in preparation* 
+
+# Frequently asked questions
 
  * *I get the Error message: no positive hits found in database. What does it mean?*
 
@@ -143,7 +275,7 @@ This means that the database is filtered on column 'Organism' using "Human" as t
 
 The required format for the database is a tab-delimited txt file. The file must contain the columns: ComplexID and ComplexName. 
 Additionally, the pipeline requires a column with the feature IDs (same ID as in the provided co-elution/migration data) of a complex divided by a ";". 
-Easiest might be to check the provided databases in the folder *reference-data*. 
+Easiest might be to check the default parameter which can be used to upload the CORUM database.
 If you want to use ComplexFinder without a database, check out the FAQ (*How to run the pipeline without a database?*) below.
 
 * *How can I change the peak model?*
@@ -240,7 +372,7 @@ The following python packages are required to run the scripts (from the requirem
 * numba==0.51.2
 * numpy==1.19.4
 * pandas==1.1.4
-* Pillow==8.0.1
+* Pillow==8.1.1
 * pyparsing==2.4.7
 * python-dateutil==2.8.1
 * pytz==2020.4
@@ -248,6 +380,7 @@ The following python packages are required to run the scripts (from the requirem
 * scipy==1.5.4
 * seaborn==0.11.0
 * six==1.15.0
+* sklearn==0.0
 * threadpoolctl==2.1.0
 * umap-learn==0.4.6
 * uncertainties==3.1.4

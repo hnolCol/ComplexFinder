@@ -13,7 +13,7 @@ from datetime import datetime
 from modules.Signal import Signal
 from modules.Database import Database
 from modules.Predictor import Classifier, ComplexBuilder
-from modules.utils import calculateDistanceP, chunks, cleanPath, minMaxNorm
+from modules.utils import calculateDistanceP, chunks, cleanPath, minMaxNorm, extractMeanByBounds, extractMetricByShiftBounds
 
 import joblib
 from joblib import Parallel, delayed, dump, load
@@ -121,6 +121,7 @@ class ComplexFinder(object):
                 alignMethod = "RadiusNeighborsRegressor",#"RadiusNeighborsRegressor",#"KNeighborsRegressor",#"LinearRegression", # RadiusNeighborsRegressor
                 alignRuns = False,
                 alignWindow = 3,
+                allowSingleFractionQuant = False,
                 analysisMode = "label-free", #[label-free,SILAC,SILAC-TMT]
                 analysisName = None,
                 binaryDatabase = False,
@@ -146,7 +147,7 @@ class ComplexFinder(object):
                 kFold = 3,
                 maxPeaksPerSignal = 15,
                 maxPeakCenterDifference = 1.8,
-                metrices = ["apex","pearson","euclidean","umap-dist","cosine","max_location","rollingCorrelation","signalDiff"],
+                metrices = ["apex","pearson","euclidean","umap-dist","cosine","max_location","rollingCorrelation"],
                 metricesForPrediction = None,#["pearson","euclidean","apex"],
                 metricQuantileCutoff = 0.001,
                 minDistanceBetweenTwoPeaks = 3,
@@ -172,7 +173,9 @@ class ComplexFinder(object):
                 smoothWindow = 2,
                 takeRondomSampleFromData =False,
                 topNCorrFeaturesForUMAPAlignment = 200,
+                TMTPoolMethod = "mean",
                 useRawDataForDimensionalReduction = False,
+                useFWHMForQuant = True,
                 umapDefaultKwargs = {"min_dist":0.001,"n_neighbors":5,"n_components":2,"random_state":120},
                 quantFiles = [],
                 usePeakCentricFeatures = False
@@ -358,11 +361,26 @@ class ComplexFinder(object):
         
         * useRawDataForDimensionalReduction = False, Setting this to true, will force the pipeline to use the raw values for dimensional reduction. Distance calculations are not automatically turned off and the output is generated but they are not used.
         
+        * useFWHMForQuant = True
+            If quantFiles is specific, will use the FWHM for peak centric quantification. By default at least a mean of +/- peak centric fraction will 
+            be consider (e.g. 3 fraction). However you cann allow single fraction quantification for narrow peaks by setting 'allowSingleFractionQuant' to True.
+
         * umapDefaultKwargs = {"min_dist":0.0000001,"n_neighbors":3,"n_components":2},
             If you want to perform an aligned UMPA consider altering the parameter alignment_window_size and alignment_regularisation. Find more information here
             (https://umap-learn.readthedocs.io/en/latest/aligned_umap_basic_usage.html#aligning-varying-parameters)
         
-        * quantFiles = [] list of str.
+        * quantFiles = dict
+            *   Quantifiaction files. dict with key name of co-fraction file and values with the path to the quantificaation file 
+                Assuming your grouping is something like: {"WT":["WT_01.txt","WT_02.txt"]}. Then the quantification files must
+                contain a key for each file: something like {"WT_01.txt":"myCoolProject/quant/WT01_quant.txt"}.
+                Assuming the folder myCoolProject/ exists where the main file is.
+                If analysing a TMT-SILAC experiment it is required to provide TMT labelings for heavy and light peaks separately, the
+                provided dict should look something like this:
+                {
+                        "HEAVY_WT_01.txt":"myCoolProject/quant/WT01_quant_heavy.txt",
+                        "LIGHT_WT_01.txt":"myCoolProject/quant/WT01_quant_light.txt"
+                }
+
             
         Returns
         -------
@@ -428,7 +446,10 @@ class ComplexFinder(object):
             "topNCorrFeaturesForUMAPAlignment" : topNCorrFeaturesForUMAPAlignment,
             "databaseEntrySplitString": databaseEntrySplitString,
             "version" : __VERSION__,
-            "usePeakCentricFeatures" : usePeakCentricFeatures
+            "usePeakCentricFeatures" : usePeakCentricFeatures,
+            "allowSingleFractionQuant" : allowSingleFractionQuant,
+            "useFWHMForQuant" : useFWHMForQuant,
+            "TMTPoolMethod" : TMTPoolMethod
             }
         print("\n" + str(self.params))
         self._checkParameterInput()
@@ -506,9 +527,114 @@ class ComplexFinder(object):
                         setattr(self.Signals[self.currentAnalysisName][modelID],k,v)
                 self.Signals[self.currentAnalysisName][modelID].saveResults()
 
-    def _attachQuantificationDetails(self):
+    def _attachQuantificationDetails(self, combinedPeakModels = None):
         """
         """
+        if self.params["analysisMode"] == "label-free":
+            if len(self.params["quantFiles"]) != 0:
+                print("Warning :: Quant files have been specified but anaylsis mode is label-free. Please define SILAC or TMT or SILAC-TMT")
+            print("Info :: Label-free mode selected. No additation quantification performed..")
+            return
+        
+        if len(self.params["quantFiles"]) > 0:
+
+            files = np.array(list(self.params["grouping"].values())).flatten()
+            print(files)
+
+            if len(self.params["quantFiles"]) != files.size:
+                print("Warning :: Different number of quantFiles and groupings provided.")
+            
+            if self.params["analysisMode"] != "SILAC-TMT":
+                initFilesFound = [k for k in self.params["quantFiles"].keys() if k in files]
+                
+            else:
+                initFilesFound = [k for k in self.params["quantFiles"].keys() if k.split("HEAVY_",maxsplits=1)[-1] in files or k.split("LIGHT_",maxsplits=1)[-1] in files]
+
+            print("Info :: For the following files and correpsonding co-elution profile data was detected")
+            print(initFilesFound)
+            print("Warning :: other files will be ignored.")
+
+            # elif self.params["analysisMode"] == "SILAC-TMT":
+
+            #     if not all(f.startswith("HEAVY") or f.startswith("LIGHT") for f in self.params["quantFiles"].keys()):
+            #         print("Warning :: If using a SILAC-TMT experiment, please provide 'HEAVY' and 'LIGHT' before the file in the dict 'quantFile' such as 'HEAVY_WT_01.txt':<path to quant file> as well as 'LIGHT_WT_01.txt':<path to quant file>")
+                
+            if combinedPeakModels is None:
+                ## load combined peak reuslts
+                txtOutput = os.path.join(self.params["pathToComb"],"CombinedModelPeakResults.txt")
+                if os.path.exists(txtOutput):
+                    combinedPeakModels = pd.read_csv(txtOutput,sep="\t")
+                else:
+                    print("Warning :: Combined peak model reuslts not found. Deleted? Skipping peak centric quantification.")
+                    return
+                
+
+                print("Info :: Starting peak centric quantification. In total {} peaks were found".format(combinedPeakModels.index.size))
+                print("Info :: Loading quantification files.")
+                if not all(os.path.exists(pathToQuantFile) for pathToQuantFile in self.params["quantFiles"].values()):
+                    print("Warning :: Not all quant files found!")
+
+                quantFilesLoaded = [(k,pd.read_csv(v,sep="\t",index_col = 0)) for k,v in self.params["quantFiles"].items() if os.path.exists(v) and k in initFilesFound]
+                if len(quantFilesLoaded) == 0:
+                    print("Warning :: No quant files found. Skipping peak-centric quantification.")
+                    return 
+                
+                if self.params["analysisMode"] == "SILAC":
+                        print("Info :: Peak cetnric quantification using SILAC :: Assuming one SILAC ratio per fraction .")
+                      
+                elif self.params["analysisMode"] == "TMT":
+                    print("Info :: Peak centric quantification using TMT :: Assuming the following order:")
+                    print("Ignoring column headers, just uses the column index as follow..")
+                    print("Fraction 1 - TMT reporter 1, Fraction 1 - TMT reporter 2, Faction 2 - TMT reporter 3 .... Fraction 2 - TMT reporter 1")
+
+
+
+                for k,quantFile in quantFilesLoaded:
+                    print("Info :: Quantification of ", k)
+                    centerColumnName = "Center_{}".format(k)
+                    fwhmColumnName = "fwhm_{}".format(k)
+                    lowerBound = combinedPeakModels[centerColumnName] - combinedPeakModels[fwhmColumnName]/2
+                    upperBound = combinedPeakModels[centerColumnName] + combinedPeakModels[fwhmColumnName]/2 
+
+                    peakBounds = np.concatenate([lowerBound.values.reshape(-1,1),upperBound.values.reshape(-1,1)],axis=1)
+                    peakBounds[:,1] += 1 #add one extra to use bounds as a range in python
+                    #check bounds
+                    peakBounds[peakBounds[:,0] < 0, 0] = 0
+                    peakBounds[peakBounds[:,1] >= quantFile.columns.size, 1] = quantFile.columns.size - 1
+                    #transform bounds to ints
+                    peakBounds = np.around(peakBounds,0).astype(np.int64)
+                    quantData = quantFile.loc[combinedPeakModels["Key"].values].values
+                   
+                    if self.params["analysisMode"] == "SILAC":
+                        print("Info :: Peak cetnric quantification using SILAC :: extracting mean from file {}.".format(k))
+                        out = extractMeanByBounds(
+                                    NPeakModels = combinedPeakModels.index.size, 
+                                    peakBounds = peakBounds,
+                                    quantData = quantData
+                                    )
+                    elif self.params["analysisMode"] == "TMT":
+                        print("Info :: Peak centric quantification using TMT :: extracting sum from TMT reporters using file {}".format(self.params["quantFiles"][k]))
+                        print("Info :: Detecting reporter channles..")
+                        nFractions = self.Xs[k].shape[1]
+                        nTMTs = quantData.shape[1] / nFractions
+                        print("Info :: {} reporter channels detected and {} fractions.".format(nTMTs,nFractions))
+                        if nTMTs != int(nTMTs):
+                            print("Warning :: Could not detect the number of TMT reporter channles. Please check columns in quantFiles to have nTMTx x fractions columns")
+                            continue
+                        nTMTs = int(nTMTs)
+
+                        out = extractMetricByShiftBounds(
+                                    NPeakModels = combinedPeakModels.index.size, 
+                                    peakBounds = peakBounds,
+                                    quantData = quantData,
+                                    shift = nTMTs,
+                                    nFractions = nFractions
+                                )
+                    print(out)
+                    print(A)
+
+                        
+
 
 
     def _checkParameterInput(self):
@@ -529,7 +655,7 @@ class ComplexFinder(object):
         """
 
         #check anaylsis mode
-        validModes = ["label-free","SILAC","TMT-SILAC"]
+        validModes = ["label-free","SILAC","SILAC-TMT","TMT"]
         if self.params["analysisMode"] not in validModes:
             raise ValueError("Parmaeter analysis mode is not valid. Must be one of: {}".format(validModes))
         elif self.params["analysisMode"] != "label-free" and len(self.params["quantFiles"]) == 0:
@@ -1953,8 +2079,8 @@ class ComplexFinder(object):
                 self._collectRSquaredAndFitDetails()
                 
         self._saveSignals()
-        self._combinePeakResults()
-        self._attachQuantificationDetails()
+        combinedPeakModel = self._combinePeakResults()
+        self._attachQuantificationDetails(combinedPeakModel)
         
         endSignalTime = time.time()
 
@@ -2280,7 +2406,7 @@ class ComplexFinder(object):
             columnsForPeakFit = ["Amplitude","Center", "Sigma", "fwhm", "height","auc","ID", "relAUC"]
         
         print("Info :: Combining peak results.")
-        print(" : ".join(self.params["analysisName"]))
+        print("Info :: Processing : "," : ".join(self.params["analysisName"]))
         if len(self.params["analysisName"]) == 1:
             print("Info :: Single run analysed. Will continue to create peak-centric output. No alignment performed.")
             alignRuns = False
@@ -2389,12 +2515,13 @@ class ComplexFinder(object):
                 F,p = f_oneway(*testGroupData,axis=1)
                 data["-log10-p-value:(1W-ANOVA)"] = np.log10(p) * (-1)
                 data["Fvalue-1W-ANOVA)"] = F
-
+            #add ID columns
+            data["id"] = np.arange(data.index.size)
             data.to_csv(txtOutput,sep="\t",index=False)
+            return data
         else:
-            data = pd.read_csv(txtOutput,sep="\t")
-
-      
+            print("Info :: CombinedModelPeaks txt file found. Skipping combination.")
+            #data = pd.read_csv(txtOutput,sep="\t")
         
 
 
@@ -2402,38 +2529,39 @@ if __name__ == "__main__":
             #
     ComplexFinder(
         addImpurity=0.0,
+        analysisMode= "TMT",
         considerOnlyInteractionsPresentInAllRuns = 1,
         compTabFormat = False,
         restartAnalysis = False,
         recalculateDistance  = True,
         retrainClassifier = False,
-        minPeakHeightOfMax= minH,
+        minPeakHeightOfMax= 0.01,
         takeRondomSampleFromData = False,
         justFitAndMatchPeaks = False,
         noDistanceCalculationAndPrediction = False,
-        runName = "myFristRun",
+        runName = "MyFirstPeakCentricQuant",
         noDatabaseForPredictions=False, 
         rollingWinType = "triang",
         #  databaseFileName="HUMAN_COMPLEX_PORTAL.txt",
         #  databaseIDColumn= "Expanded participant list",
-        # databaseEntrySplitString = "|",
-        grouping = {"D0":["D0_aebersold.txt"]},
+        #  databaseEntrySplitString = "|",
+        grouping = {"WT":["D2_WT_01.txt"]},
         n_jobs = 12,
         databaseFilter = {'Organism': ["Mouse"]},
-        peakModel = peakModel,
         indexIsID =False,
         decoySizeFactor= 1.1,
         classifierClass="random forest",
-        minDistanceBetweenTwoPeaks = minDistPeaks,
+        minDistanceBetweenTwoPeaks = 3,
         smoothWindow = 3,
         classifierTestSize = 0.20,
         plotSignalProfiles = False,
         correlationWindowSize = 8,
         interactionProbabCutoff = 0.8,
-        usePeakCentricFeatures = True, ## careful!
+       # usePeakCentricFeatures = True, ## careful, eperimental!
         removeSingleDataPointPeaks=True, 
         keepOnlySignalsValidInAllConditions = True,
-        useRawDataForDimensionalReduction = False).run("../example-data/D0")
+        quantFiles = {"D2_WT_01.txt":"../example-data/D2/q/qD2_WT_01.txt"},
+        useRawDataForDimensionalReduction = False).run("../example-data/D2")
                     
                 #  n = 1
                

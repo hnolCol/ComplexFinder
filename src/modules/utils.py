@@ -3,6 +3,57 @@ import shutil
 import numpy as np
 from .Distance import DistanceCalculator
 import pickle 
+from numba import jit
+
+
+#@jit()
+def extractMetricByShiftBounds(NPeakModels,peakBounds,quantData,shift,nFractions):
+    out = np.zeros(shape=(NPeakModels,2))
+    idxFull = np.arange(0,quantData.shape[1])
+    
+    for n in range(NPeakModels):
+        lowerB = peakBounds[n,0] 
+        upperB = peakBounds[n,1]
+       
+        if upperB == lowerB:
+            out[n,0] = quantData[n,lowerB]
+            out[n,1] = np.nan
+        else:
+            
+            
+           # print(idxFull)
+            upperIdx = int(upperB+((shift-1)*nFractions))
+           # print(upperIdx)
+           # print(lowerB,upperIdx,shift)
+            #print(idxFull[lowerB:upperIdx:shift])
+           # print(A)
+            idx = idxFull[lowerB:upperIdx:shift]
+          
+
+            X = np.empty(shape=idx.size)
+            for ii in range(idx.size):
+                X[ii] = quantData[n,idx[ii]]
+           
+            #X = quantData[n,idx]
+            out[n,0] = np.nanmean(X)
+            out[n,1] = np.nanstd(X)
+          #  print(B)
+    return out
+
+@jit()
+def extractMeanByBounds(NPeakModels,peakBounds,quantData):
+    out = np.zeros(shape=(NPeakModels,2))
+    for n in range(NPeakModels):
+        lowerB = peakBounds[n,0] 
+        upperB = peakBounds[n,1]
+        if upperB == lowerB:
+            out[n,0] = quantData[n,lowerB]
+            out[n,1] = np.nan
+        else:
+            X = quantData[n,lowerB:upperB]
+            out[n,0] = np.nanmean(X)
+            out[n,1] = np.nanstd(X)
+    return out 
 
 def calculateDistanceP(pathToFile):
     """

@@ -630,8 +630,8 @@ class ComplexFinder(object):
                                     shift = nTMTs,
                                     nFractions = nFractions
                                 )
-                    print(out)
-                    print(A)
+                    #print(out)
+                    #print(A)
 
                         
 

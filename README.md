@@ -260,6 +260,17 @@ As a quick test, we performed predictions using 2000 randomly selected features 
 # Usin SILAC - TMT peak centric quantifiaction
 
 *in preparation* 
+ComplexFinder allows peak centric quantification using different quantification strategies. 
+
+## TMT 
+
+TMT allows for multiplexing in complexome experiments by labeling peptides with different tags that can be distinguished by different reporter ions using LC-MS/MS. Therefore the result (for example from a MaxQuant analysis) that is required are:
+* ProteinGroups.txt -> Feature IDs (protein IDs) versus iBAQ intensity in columns. This file is the base file to extract the signal profiles and on which the peak modelling will be performed. Alternatively, you can also sum all the TMT intensities. 
+* ProteinGroups.txt -> Feature IDs (protein IDs) versus the TMT Intensities per channel. If you performed a 10-plex TMT analysis, this would result in Protein ID + (fraction x 10 (TMT channels)) columns. The TMT intensties should be next to each other for each fraction, please see the figure below. TMT01_fraction_01, TMT02_fraction_01 ... TMT10_fraction_01, TMT01_fraction_02. It is advisable to put a leading zero in the MaxQuant experiment name to get the correct order straight away (otherwise you may run into such an order: 1,10,11,12,...,2,21)
+
+![Quantification using SILAC - how to design the quantFiles parameter.](/img/TMT_SILAC_QUANT.png)
+
+
 
 # Frequently asked questions
 

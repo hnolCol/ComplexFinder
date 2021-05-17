@@ -134,3 +134,6 @@ results/
 reference-data/20190823_CORUM.txt
 reference-data_
 src/modules/utils/
+example-data/0102/signalProfiles.txt
+example-data/0102/q/H_TMT.txt
+example-data/0102/q/L_TMT.txt

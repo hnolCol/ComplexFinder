@@ -260,6 +260,8 @@ As a quick test, we performed predictions using 2000 randomly selected features 
 # Usin SILAC - TMT peak centric quantifiaction
 
 *in preparation* 
+
+
 ComplexFinder allows peak centric quantification using different quantification strategies. 
 
 ## TMT 
@@ -268,7 +270,29 @@ TMT allows for multiplexing in complexome experiments by labeling peptides with 
 * ProteinGroups.txt -> Feature IDs (protein IDs) versus iBAQ intensity in columns. This file is the base file to extract the signal profiles and on which the peak modelling will be performed. Alternatively, you can also sum all the TMT intensities. 
 * ProteinGroups.txt -> Feature IDs (protein IDs) versus the TMT Intensities per channel. If you performed a 10-plex TMT analysis, this would result in Protein ID + (fraction x 10 (TMT channels)) columns. The TMT intensties should be next to each other for each fraction, please see the figure below. TMT01_fraction_01, TMT02_fraction_01 ... TMT10_fraction_01, TMT01_fraction_02. It is advisable to put a leading zero in the MaxQuant experiment name to get the correct order straight away (otherwise you may run into such an order: 1,10,11,12,...,2,21)
 
+For each peak in the samples, ComplexFinder will extract the TMT intensities and will aggreagte the fraction covered by the FWHM using a given function. By default the sum is used but can be changed to the mean as well (*TMTPoolMethod = "sum"). The data in the quantification files (feature IDs x TMT Intensities for each fraction) are not transformed at all. Therfore, if you use the mean, performing log2 transformation before averageing might be advisable. You can do this by setting the paramter *transformQuantDataBy = "log2"*. The available options are ["log2","ln",None]. None being the default which will use the provided values.
+
+
+## SILAC-TMT
+
+A combination of SILAC and TMT allows either for extended mulitplexing (2 x SILAC Channel + 10plex TMT = 20 samples) or to follow an incoporation kinetic. To this end, cells are grown on SILAC media (for example heavy) for several passages leading to fully labelled cells. Then, the media is exchanged to light media and the cell start incoporating light amino acids into newly synthesized proteins. This enabled the determination of incorporation rates / turnover rates. When combining TMT and SILAC together, the light channel peptides + TMT represent the SILAC incoporation and heavy shows the break-down of proteins. In proliferating cells, the increase in biomass (cell growth) has to be considered.
+
+*Please note that at the moment only two SILAC channels are supported*.
+
+![Schematic representation of SILAC-TMT quantification.](/img/TMT_SILAC_STRAT.png)
+
+The general strategy in complex finder for peak-centric quantification is shown in the figure above. For detected peaks, the FWHM is determined and the TMT intensities are summed over the respective fractions. Of note, for very small peaks this might a single fraction which is by default prevented. This can be allowed by setting the parameter (allowSingleFractionQuant to True). 
+
+```python
+ComplexFinder(allowSingleFractionQuant = True).run(...)
+```
+
 ![Quantification using SILAC - how to design the quantFiles parameter.](/img/TMT_SILAC_QUANT.png)
+*Figure. Quantification Stategy using TMT or SILAC-TMT experimental designs. In SILAC-TMT experimental designs, two quantification resutl files are required index by HEAVY and LIGHT.*
+
+We recommend to put the signal profiles in a folder (in the figure: myCoolAnalysis) and add the files. Create a new folder within myCoolAnalysis called 'q' in which you add the quantification data. If you put the quantification txt files in the same folder as the once for analysis, ComplexFinder will treat them as signal profiles and will try to fit model peaks to them etc. 
+
+To calculated the fit parameter for a single order kinetic, we have to provide more information otherwise, the output will contain the TMT intensities for each peak indicated by *heavy* or *light*. ComplexFinder expects a raw TMT intensities (not log2) for 
 
 
 

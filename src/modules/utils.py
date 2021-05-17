@@ -5,14 +5,39 @@ from .Distance import DistanceCalculator
 import pickle 
 from numba import jit
 
-
 #@jit()
 def extractMetricByShiftBounds(NPeakModels,peakBounds,quantData,shift,nFractions):
+    out = np.zeros(shape=(NPeakModels,shift))
+    idxFull = np.arange(0,quantData.shape[1])
+    for shiftN in range(shift):
+        for n in range(NPeakModels):
+           
+            lowerB = int((peakBounds[n,0]-1) * shift) + shiftN
+            upperB = int((peakBounds[n,1]-1) * shift) + shiftN
+        
+            if upperB == lowerB:
+                out[n,shiftN] = quantData[n,lowerB]
+                #out[n,1] = np.nan
+            else:
+                
+                idx = idxFull[lowerB:upperB:shift]
+            
+                X = np.empty(shape=idx.size)
+                for ii in range(idx.size):
+                    X[ii] = quantData[n,idx[ii]]
+            
+                #X = quantData[n,idx]
+                out[n,shiftN] = np.nansum(X)
+                #out[n,1] = np.nanstd(X)
+            #  print(B)
+    return out
+#@jit()
+def extractMetricByShiftBounds2(NPeakModels,peakBounds,quantData,shift,nFractions):
     out = np.zeros(shape=(NPeakModels,2))
     idxFull = np.arange(0,quantData.shape[1])
     
     for n in range(NPeakModels):
-        lowerB = peakBounds[n,0] 
+        lowerB = peakBounds[n,0]
         upperB = peakBounds[n,1]
        
         if upperB == lowerB:
@@ -29,7 +54,6 @@ def extractMetricByShiftBounds(NPeakModels,peakBounds,quantData,shift,nFractions
            # print(A)
             idx = idxFull[lowerB:upperIdx:shift]
           
-
             X = np.empty(shape=idx.size)
             for ii in range(idx.size):
                 X[ii] = quantData[n,idx[ii]]
@@ -37,6 +61,10 @@ def extractMetricByShiftBounds(NPeakModels,peakBounds,quantData,shift,nFractions
             #X = quantData[n,idx]
             out[n,0] = np.nanmean(X)
             out[n,1] = np.nanstd(X)
+            if n == 1:
+                print(X)
+                print(idx)
+                print(b)
           #  print(B)
     return out
 

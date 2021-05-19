@@ -175,7 +175,7 @@ ComplexFinder(
 
 Find below an overview about the extensive output of ComplexFinder. 
 
-<img src="/img/ComplexFinder_folderStructure.png" height="200px">
+<img src="/img/ComplexFinder_folderStructure.png" height="800px">
 
 
 

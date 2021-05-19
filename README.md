@@ -5,6 +5,8 @@
 
 ## Next Feature (Testing) Implementations (05.2021)
 
+We list here several features that we will implement in the next versions. If checked, they are already available but might be still experimental. 
+
 - [ ] Extend plotting capabibilties to extract profiles of features and complex
 ```python
 
@@ -23,6 +25,8 @@ ComplexFinder(analysisName="<Created folder in results folder>").plotComplexProf
 
 ```
 - [ ] Test a DeepLearning Implementation
+- [ ] AlignedUMAP for stable complexes 
+ 
 
 
 ## Workflow
@@ -167,11 +171,17 @@ ComplexFinder(
             ).run(pathToFiles)
 ```
 
+## ComplexFinder Output 
+
+Find below an overview about the extensive output of ComplexFinder. 
+
+<img src="/img/ComplexFinder_folderStructure.png" height="200px">
+
+
 
 ## Using ComplexFinder without protein connectivity
 
 ### Using raw signal profiles
-
 
 ### Using distances metrics
 

@@ -4,7 +4,7 @@ import numpy as np
 from .Distance import DistanceCalculator
 import pickle 
 from numba import jit
-
+import pandas as pd
 #@jit()
 def extractMetricByShiftBounds(NPeakModels,peakBounds,quantData,shift,nFractions):
     out = np.zeros(shape=(NPeakModels,shift))
@@ -70,6 +70,7 @@ def extractMetricByShiftBounds2(NPeakModels,peakBounds,quantData,shift,nFraction
 
 @jit()
 def extractMeanByBounds(NPeakModels,peakBounds,quantData):
+    "Calculate data from given bounds"
     out = np.zeros(shape=(NPeakModels,2))
     for n in range(NPeakModels):
         lowerB = peakBounds[n,0] 
@@ -77,6 +78,7 @@ def extractMeanByBounds(NPeakModels,peakBounds,quantData):
         if upperB == lowerB:
             out[n,0] = quantData[n,lowerB]
             out[n,1] = np.nan
+            
         else:
             X = quantData[n,lowerB:upperB]
             out[n,0] = np.nanmean(X)
@@ -91,9 +93,11 @@ def calculateDistanceP(pathToFile):
         chunkItems = pickle.load(f)
     exampleItem = chunkItems[0] #used to get specfici chunk name to save under same name
     if "chunkName" in exampleItem:
-        data = np.concatenate([DistanceCalculator(**c).calculateMetrices() for c in chunkItems],axis=0)
+        XX = [DistanceCalculator(**c).calculateMetrices() for c in chunkItems]
+        data = np.concatenate([X[0] for X in XX],axis=0)
         np.save(os.path.join(exampleItem["pathToTmp"],"chunks",exampleItem["chunkName"]),data)  
-      
+        if not XX[0][1].empty:
+            pd.concat([X[1] for X in XX],ignore_index=True).to_csv(os.path.join(exampleItem["pathToTmp"],"ApexDetails_{}.txt".format(exampleItem["chunkName"])),sep="\t",index=None)
         return (exampleItem["chunkName"],[''.join(sorted(row.tolist())) for row in data[:,[0,1]]])
         
 

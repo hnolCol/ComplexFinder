@@ -580,7 +580,10 @@ class Database(object):
 
         chunkItems = pd.DataFrame([self._createSingleChunk(idx,entriesInChunks,self.df) for idx in self.df.index])
         chunkItems = chunkItems.set_index("E1E2",drop=False)
+        boolIdx = chunkItems["requiredFile"] != ""
+        chunkItems = chunkItems.loc[boolIdx]
         output = []
+        print(chunkItems)
         for fileName, fileData in chunkItems.groupby("requiredFile"):
 
             X = pd.DataFrame(np.load(os.path.join(pathToTmp,"chunks",fileName),allow_pickle=True),columns = firstCols + metricColumns)
@@ -643,7 +646,8 @@ class Database(object):
         requiredFiles = []
         if E1E2 in entriesInChunks:
             requiredFiles = "{}.npy".format(entriesInChunks[E1E2])
-
+        else:
+            requiredFiles = ""
           
         #requiredFiles = ["{}.npy".format(k) for k,v in  entriesInChunks.items() if E1E2 in v]
         return {"E1":E1,"E2":E2,"E1E2":E1E2,"Class":className,"requiredFile":requiredFiles}

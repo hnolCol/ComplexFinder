@@ -1,5 +1,6 @@
 
 import numpy as np
+from numpy.core.fromnumeric import size
 import pandas as pd
 import itertools
 
@@ -54,21 +55,24 @@ def _apexDistance(mu1,mu2,s1,s2):
 @jit()
 def _apexScore(ownPeaks,otherSignalPeaks):
 
-    apex = 200.0
-    
+    apex = np.inf
+    apexOut = np.zeros(shape = (ownPeaks.shape[0] *  otherSignalPeaks.shape[0],3)) #array of id1, id2 and apex
+    ii = 0
     for n in range(ownPeaks.shape[0]):
         for m in range(otherSignalPeaks.shape[0]):
             mu1, s1 = ownPeaks[n,0:2]
             mu2, s2 = otherSignalPeaks[m,0:2]
            
             a = _apexDistance(mu1,mu2,s1,s2)
+            apexOut[ii,:] = [n,m,a]
             
             if a < apex:
                 apex = a
                 id1 = n
                 id2 = m
+            ii += 1
 
-    return apex, id1, id2
+    return apex, id1, id2, apexOut
 
 @jit()
 def signalDifference(nY,Ys):
@@ -175,10 +179,8 @@ def cosineDistance(nY,Ys):
 @jit(fastmath=True)
 def slidingPearson(slidingWindow,fixIdx = 0):
     
-
     results = np.empty(shape=(slidingWindow.shape[0],1))
-
-    Yfixed = slidingWindow
+    #Yfixed = slidingWindow
 
     for n in range(slidingWindow.shape[0]):
         if n != fixIdx:
@@ -187,7 +189,6 @@ def slidingPearson(slidingWindow,fixIdx = 0):
                 Y1 = slidingWindow[fixIdx][nw]
                 Y2 = slidingWindow[n][nw]
                 if np.sum(Y1) > 0 and np.sum(Y2) > 0 and np.count_nonzero(Y1) >= 4 and np.count_nonzero(Y2) >= 4:
-                    
                     rw = _pearson(Y1,Y2)
                     if rw < r:
                         r = rw
@@ -198,10 +199,6 @@ def slidingPearson(slidingWindow,fixIdx = 0):
     return results
 
     
-
-
-
-
 
 class DistanceCalculator(object):
 
@@ -315,12 +312,29 @@ class DistanceCalculator(object):
     def apex(self,otherSignalPeaks):
         "Calculates Apex Distance"
         out = []
-        for otherPeaks in otherSignalPeaks:
+        
+        #sizes = [(n,otherPeaks["IDs"].size) for n,otherPeaks in enumerate(otherSignalPeaks)]
+        E2s = []
+        E1 = []
+        XX = pd.DataFrame(columns=["E1","E2","id1","id2","apex"])
+        r = []
+        
+        for n,otherPeaks in enumerate(otherSignalPeaks):
 
-            apex, ownIdx, otherIdx = _apexScore(self.ownPeaks["peaks"],otherPeaks["peaks"])
+            apex, ownIdx, otherIdx, apexScores = _apexScore(self.ownPeaks["peaks"],otherPeaks["peaks"])
             out.append((apex,"{}_{}".format(ownIdx,otherIdx)))
+            
+            r.append(apexScores)
+            E2s.extend([self.E2s[n]]*apexScores.shape[0])
+            E1.extend([self.ID]*apexScores.shape[0])
 
-        return out
+        rr = np.concatenate(r)
+
+        XX.loc[:,"E1"] = E1 
+        XX.loc[:,"E2"] = E2s 
+        XX.loc[:,["id1","id2","apex"]] = rr# XX.append({"E1":E1,"E2":E2s,"id1":rr[:,0],"id1":rr[:,1],"apex":rr[:,2]},ignore_index=True)
+ 
+        return out, XX
         
 
     #    # apexDist,apexMinArg = _apexScore(self.ownPeaks,otherSignalPeaks,"gamma" in self.ownPeaks[0])
@@ -399,7 +413,7 @@ class DistanceCalculator(object):
 
         """
         collectedDf = pd.DataFrame()
-
+        detailedApexResults = pd.DataFrame() 
         collectedDf["E1"] = [self.ID] * len(self.E2s)
         collectedDf["E2"] = self.E2s
 
@@ -432,8 +446,8 @@ class DistanceCalculator(object):
                 collectedDf["cosine"] = self.cosine()    
             
             elif metric == "apex":
-            
-                collectedDf["apex"], collectedDf["apex_peakId"] = zip(*self.apex(self.otherSignalPeaks))
+                idScore, detailedApexResults = self.apex(self.otherSignalPeaks)
+                collectedDf["apex"], collectedDf["apex_peakId"] = zip(*idScore)
 
             elif metric == "max_location":
 
@@ -464,7 +478,7 @@ class DistanceCalculator(object):
 
         collectedDf = collectedDf[firstCols + columnsResorted]
 
-        return collectedDf.values
+        return collectedDf.values, detailedApexResults
 
 
 

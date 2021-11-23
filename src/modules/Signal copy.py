@@ -20,7 +20,6 @@ class Signal(object):
             Y, 
             ID= "", 
             peakModel = 'LorentzianModel', 
-            nonNan = 4, 
             maxPeaks = 12, 
             savePlots = True, 
             savePeakModels = True, 
@@ -76,6 +75,7 @@ class Signal(object):
         self.minDistanceBetweenTwoPeaks = minDistanceBetweenTwoPeaks
         self.minPeakHeightOfMax = minPeakHeightOfMax
         self.Rsquared = np.nan
+        self.removedDataPoints = 0
         self.valid = True
         self.validData = True
         self.validModel = True
@@ -84,7 +84,7 @@ class Signal(object):
         self.inputY = self.Y.copy()
         #self.modelledPeaks = []
         if removeSingleDataPointPeaks:
-            self.Y = self._removeSingleDataPointPeaks()
+            self.Y, self.removedDataPoints = self._removeSingleDataPointPeaks()
         if smoothSignal:
             self.Y = self.smoothSignal(N = smoothRollingWindow)
         if normalizationValue is not None:
@@ -130,28 +130,35 @@ class Signal(object):
         Filtered Y
 
         """
+        peaksFiltered = 0
         flilteredY = []
 
         for i,x in enumerate(self.Y):
             if i == 0: #first item is different
                 if self.Y[i+1] == 0:
                     flilteredY.append(0)
+                    if self.Y[i] > 0:
+                        peaksFiltered += 1
                 else:
                     flilteredY.append(x)
 
             elif i == self.Y.size - 1: #last item also
                 if self.Y[-1] != 0 and self.Y[-1]:
                     flilteredY.append(0)
+                    if self.Y[i] > 0:
+                        peaksFiltered += 1
                 else:
                     flilteredY.append(x)
 
             else:
                 if self.Y[i-1] == 0 and self.Y[i+1] == 0:
                     flilteredY.append(0)
+                    if self.Y[i] > 0:
+                        peaksFiltered += 1
                 else:
                     flilteredY.append(x)
 
-        return np.array(flilteredY)
+        return np.array(flilteredY), peaksFiltered
 
     def isValid(self, nonZero = 4):
         """Returns true if signal contains more than 
@@ -181,13 +188,20 @@ class Signal(object):
         if N == "auto":
             N = self._getN(Y)
         return pd.Series(Y).rolling(window=N, center=True, win_type = 'triang').mean().fillna(0).values
+    
+    def _movingMin(self,Y,N):
+        ""
+        if N == "auto":
+            N = self._getN(Y)
+        return pd.Series(Y).rolling(window=N, center=True, win_type = None).min().fillna(0).values
 
     def smoothSignal(self,method='moving average',N="auto"):
         ""
 
         if method == "moving average":
             return self._movingMean(self.Y,N)
-        
+        elif method == "moving min":
+            return self._movingMin(self.Y,N)
     
     def findPeaks(self,cwt=False,widths=[2,3,4]):
 
@@ -252,20 +266,20 @@ class Signal(object):
             #small peaks should not be to wide! 
             self._addParam(modelParams,
                             name=prefix+'amplitude',
-                            max = self.Y[peakIdx[i]] * 2 * np.pi,
-                            value = self.Y[peakIdx[i]] * 0.25 * np.pi,
-                            min = self.Y[peakIdx[i]] * 0.01 * np.pi)
+                            max = self.Y[peakIdx[i]] * 1.2 * np.pi,
+                            value = self.Y[peakIdx[i]] * 0.8 * np.pi,
+                            min = self.Y[peakIdx[i]] * 0.3 * np.pi)
             
             self._addParam(modelParams,
                         name=prefix+'sigma', 
-                        value = 0.255,
+                        value = 0.20,
                         min = 0.01, 
-                        max = 2.5)
+                        max = 1.3)
         else:
 
             self._addParam(modelParams,
                             name=prefix+'amplitude',
-                            max = self.Y[peakIdx[i]] * 3.5 * np.pi,
+                            max = self.Y[peakIdx[i]] * 1.5 * np.pi,
                             value = self.Y[peakIdx[i]] * 0.25 * np.pi,
                             min = self.Y[peakIdx[i]] * 0.05 * np.pi)
 
@@ -273,7 +287,7 @@ class Signal(object):
                 name=prefix+'sigma', 
                 value = 0.255,
                 min = 0.06, 
-                max = 3.0)
+                max = 1.3)
 
         self._addParam(modelParams,
                 name=prefix+'center', 
@@ -378,7 +392,7 @@ class Signal(object):
         if modelComposite is None:
             
             return {"id":self.ID,"valid":False,"validData":True,"validModel":False}
-        fitOutput = modelComposite.fit(self.Y, params, x=spec['x'], method="powell")
+        fitOutput = modelComposite.fit(self.Y, params, x=spec['x'], method="Powell")
         r2 = self._calculateSquredR(fitOutput,spec)
         self.Rsquared = r2 
         if r2 < self.r2Thresh:

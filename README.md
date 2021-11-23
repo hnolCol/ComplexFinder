@@ -1,5 +1,7 @@
 # ComplexFinder
 
+<img src="/img/complexFinderLogo.png" height="150px">
+
  Finds complexes from Blue-Native and SEC Fractionation analyzed by Liquid Chromatogrpahy coupled to Mass Spectrometry. In 
  principal it works with any separation technique resulting in co-elution signal profiles. To avoid licence issues and accumulation of old database files, please first download the database of choce (see below *Download Protein-Protein Interaction Data*). 
 
@@ -15,7 +17,7 @@ ComplexFinder(analysisName="<Created folder in results folder>").plotFeature()
 
 #plotting selected feature's distance metrics compared to the complete population (all features)
 #due to scaling of features prior training of the predictor, boxplot should display scaled and raw features.
-ComplexFinder(analysisName="<Created folder in results folder>").plotFeatureDistanceMetircs()
+ComplexFinder(analysisName="<Created folder in results folder>").plotFeatureDistanceMetrics()
 
 #plotting features of complex found by ComplexFinder (clusterLabels == ID)
 ComplexFinder(analysisName="<Created folder in results folder>").plotComplexProfileByClusterLabel()
@@ -175,7 +177,7 @@ ComplexFinder(
 
 Find below an overview about the extensive output of ComplexFinder. 
 
-<img src="/img/ComplexFinder_folderStructure.png" height="800px">
+<img src="/img/ComplexFinder_folderStructure.png" height="650px">
 
 
 

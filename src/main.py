@@ -24,7 +24,7 @@ import numpy as np
 from collections import OrderedDict
 from itertools import combinations
 
-from multiprocessing import Pool
+from multiprocessing import Pool, Value
 from joblib import wrap_non_picklable_objects
 
 #plotting
@@ -147,7 +147,7 @@ class ComplexFinder(object):
                 kFold = 3,
                 maxPeaksPerSignal = 15,
                 maxPeakCenterDifference = 1.8,
-                metrices = ["apex","pearson","euclidean","umap-dist","cosine","max_location","rollingCorrelation"],
+                metrices = ["apex","pearson","euclidean","cosine","max_location","rollingCorrelation"], #"umap-dist"
                 metricesForPrediction = None,#["pearson","euclidean","apex"],
                 metricQuantileCutoff = 0.001,
                 minDistanceBetweenTwoPeaks = 3,
@@ -157,7 +157,7 @@ class ComplexFinder(object):
                 noDatabaseForPredictions = False,
                 normValueDict = {},
                 noDistanceCalculationAndPrediction = False,
-                peakModel = "GaussianModel",#"SkewedGaussianModel",#"LorentzianModel",
+                peakModel = "LorentzianModel",#"GaussianModel",#"SkewedGaussianModel",#"LorentzianModel",
                 plotSignalProfiles = False,
                 plotComplexProfiles = False,
                 precision = 0.5,
@@ -373,7 +373,7 @@ class ComplexFinder(object):
         * quantFiles = dict
             *   Quantifiaction files. dict with key name of co-fraction file and values with the path to the quantificaation file 
                 Assuming your grouping is something like: {"WT":["WT_01.txt","WT_02.txt"]}. Then the quantification files must
-                contain a key for each file: something like {"WT_01.txt":"myCoolProject/quant/WT01_quant.txt"}.
+                contain a key for each file: something like {"WT_01.txt":"myCoolProject/quant/WT01_quant.txt","WT_02.txt":"myCoolProject/quant/WT02_quant.txt"}.
                 Assuming the folder myCoolProject/ exists where the main file is.
                 If analysing a TMT-SILAC experiment it is required to provide TMT labelings for heavy and light peaks separately, the
                 provided dict should look something like this:
@@ -542,6 +542,7 @@ class ComplexFinder(object):
 
             files = np.array(list(self.params["grouping"].values())).flatten()
             print(files)
+            print(self.params["quantFiles"].keys())
 
             if len(self.params["quantFiles"]) != files.size and self.params["analysisMode"] != "SILAC-TMT":
                 print("Warning :: Different number of quantFiles and groupings provided.")
@@ -563,7 +564,8 @@ class ComplexFinder(object):
 
             #     if not all(f.startswith("HEAVY") or f.startswith("LIGHT") for f in self.params["quantFiles"].keys()):
             #         print("Warning :: If using a SILAC-TMT experiment, please provide 'HEAVY' and 'LIGHT' before the file in the dict 'quantFile' such as 'HEAVY_WT_01.txt':<path to quant file> as well as 'LIGHT_WT_01.txt':<path to quant file>")
-                
+        
+            print("combining Peaks!!")
             if combinedPeakModels is None:
                 ## load combined peak reuslts
                 txtOutput = os.path.join(self.params["pathToComb"],"CombinedPeakModelResults.txt")
@@ -574,114 +576,127 @@ class ComplexFinder(object):
                     return
                 
 
-                print("Info :: Starting peak centric quantification. In total {} peaks were found".format(combinedPeakModels.index.size))
-                print("Info :: Loading quantification files.")
-                if not all(os.path.exists(pathToQuantFile) for pathToQuantFile in self.params["quantFiles"].values()):
-                    print("Warning :: Not all quant files found!")
-                if self.params["analysisMode"] != "SILAC-TMT":
-                    quantFilesLoaded = [(k,pd.read_csv(v,sep="\t",index_col = 0),False) for k,v in self.params["quantFiles"].items() if os.path.exists(v) and k in initFilesFound]
-                else:
-                    quantFilesLoaded = [(k.split("HEAVY_",maxsplit=1)[-1] if "HEAVY" in k else k.split("LIGHT_",maxsplit=1)[-1],pd.read_csv(v,sep="\t",index_col = 0),"LIGHT" in k) for k,v in self.params["quantFiles"].items() if os.path.exists(v) and k in initFilesFound]
+            print("Info :: Starting peak centric quantification. In total {} peaks were found".format(combinedPeakModels.index.size))
+            print("Info :: Loading quantification files.")
+            if not all(os.path.exists(pathToQuantFile) for pathToQuantFile in self.params["quantFiles"].values()):
+                print("Warning :: Not all quant files found!")
+            if self.params["analysisMode"] != "SILAC-TMT":
+                print(self.params["quantFiles"].values())
+                path = list(self.params["quantFiles"].values())
+                print(os.path.abspath(path[0]))
                 
-                if len(quantFilesLoaded) == 0:
-                    print("Warning :: No quant files found. Skipping peak-centric quantification.")
-                    return 
+                quantFilesLoaded = [(k,pd.read_csv(v,sep="\t",index_col = 0),False) for k,v in self.params["quantFiles"].items() if os.path.exists(v) and k in initFilesFound]
+            else:
+                quantFilesLoaded = [(k.split("HEAVY_",maxsplit=1)[-1] if "HEAVY" in k else k.split("LIGHT_",maxsplit=1)[-1],pd.read_csv(v,sep="\t",index_col = 0),"LIGHT" in k) for k,v in self.params["quantFiles"].items() if os.path.exists(v) and k in initFilesFound]
+            
+            if len(quantFilesLoaded) == 0:
+                print("Warning :: No quant files found. Skipping peak-centric quantification.")
+                return 
+            
+            if self.params["analysisMode"] == "SILAC":
+                    print("Info :: Peak centric quantification using SILAC :: Assuming one SILAC ratio per fraction .")
+                    
+            elif self.params["analysisMode"] == "TMT":
+                print("Info :: Peak centric quantification using TMT :: Assuming the following order:")
+                print("Ignoring column headers, just uses the column index as follow..")
+                print("Fraction 1 - TMT reporter 1, Fraction 1 - TMT reporter 2, Faction 2 - TMT reporter 3 .... Fraction 2 - TMT reporter 1")
+
+
+            extractedQuantFiles = []
+
+            for k,quantFile,isLightQuantData in quantFilesLoaded:
+                print("Info :: Quantification of ", k)
+                centerColumnName = "Center_{}".format(k)
+                fwhmColumnName = "fwhm_{}".format(k)
+                quantFileName = "Q({})".format(k)
+                combinedPeakModelsFiltered = combinedPeakModels.dropna(subset=[centerColumnName])
+                lowerBound = combinedPeakModelsFiltered[centerColumnName] - combinedPeakModelsFiltered[fwhmColumnName]/1.7
+                upperBound = combinedPeakModelsFiltered[centerColumnName] + combinedPeakModelsFiltered[fwhmColumnName]/1.7
+
+                peakBounds = np.concatenate([lowerBound.values.reshape(-1,1),upperBound.values.reshape(-1,1)],axis=1)
+                peakBounds[:,1] += 1 #add one extra to use bounds as a range in python
+                #check bounds
+                peakBounds[peakBounds[:,0] < 0, 0] = 0
+                peakBounds[peakBounds[:,1] >= quantFile.columns.size, 1] = quantFile.columns.size - 1
+                #transform bounds to ints
+                peakBounds = np.around(peakBounds,0).astype(np.int64)
+                quantData = quantFile.loc[combinedPeakModelsFiltered["Key"].values].values
                 
                 if self.params["analysisMode"] == "SILAC":
-                        print("Info :: Peak centric quantification using SILAC :: Assuming one SILAC ratio per fraction .")
-                      
+                    print("Info :: Peak centric quantification using SILAC :: extracting mean from file {}.".format(k))
+                    out = extractMeanByBounds(
+                                NPeakModels = combinedPeakModelsFiltered.index.size, 
+                                peakBounds = peakBounds,
+                                quantData = quantData
+                                )
+                    quantColumnNames = ["SILAC({})_Mean".format(quantFileName),"SILAC({})_Error".format(quantFileName)]
+                    print(out)
+                    print(quantColumnNames)
+                    dfResult = pd.DataFrame(out,index=combinedPeakModelsFiltered.index, columns = quantColumnNames)
+                    dfResult = dfResult.join(pd.DataFrame(peakBounds,index=combinedPeakModelsFiltered.index, columns = ["SILAC({})_LowerBound".format(quantFileName),"SILAC({})_UpperBound".format(quantFileName)]))
+                    extractedQuantFiles.append(dfResult)
+                    
+
                 elif self.params["analysisMode"] == "TMT":
-                    print("Info :: Peak centric quantification using TMT :: Assuming the following order:")
-                    print("Ignoring column headers, just uses the column index as follow..")
-                    print("Fraction 1 - TMT reporter 1, Fraction 1 - TMT reporter 2, Faction 2 - TMT reporter 3 .... Fraction 2 - TMT reporter 1")
+                    print("Info :: Peak centric quantification using TMT :: extracting sum from TMT reporters using file {}".format(self.params["quantFiles"][k]))
+                    print("Info :: Detecting reporter channles..")
+                    nFractions = self.Xs[k].shape[1]
+                    nTMTs = quantData.shape[1] / nFractions
+                    print("Info :: {} reporter channels detected and {} fractions.".format(nTMTs,nFractions))
+                    if nTMTs != int(nTMTs):
+                        print("Warning :: Could not detect the number of TMT reporter channles. Please check columns in quantFiles to have nTMTx x fractions columns")
+                        continue
+                    nTMTs = int(nTMTs)
+
+                    out = extractMetricByShiftBounds(
+                                NPeakModels = combinedPeakModels.index.size, 
+                                peakBounds = peakBounds,
+                                quantData = quantData,
+                                shift = nTMTs,
+                                nFractions = nFractions
+                            )
+                    quantColumnNames = []
+                    dfResult = pd.DataFrame(out,index=combinedPeakModels.index, columns = quantColumnNames)
+                    extractedQuantFiles.append(dfResult)
 
 
-                extractedQuantFiles = []
+                elif self.params["analysisMode"] == "SILAC-TMT":
+                    print("Info :: Extracting quantification details from SILAC-TMT data.")
+                    print("Info :: Detecting reporter channles..")
+                    nFractions = self.Xs[k].shape[1]
+                    nTMTs = quantData.shape[1] / nFractions
+                    print("Info :: {} reporter channels detected and {} fractions.".format(nTMTs,nFractions))
+                    if nTMTs != int(nTMTs):
+                        print("Warning :: Could not detect the number of TMT reporter channles. Please check columns in quantFiles to have nTMTx x fractions columns")
+                        continue
+                    nTMTs = int(nTMTs)
+                    
+                    # print(peakBounds)
+                    # print(combinedPeakModels["Key"])
+                    # print(isLightQuantData)
+                    quantData[quantData == 0.0] = np.nan
+                    out = extractMetricByShiftBounds(
+                                NPeakModels = combinedPeakModels.index.size, 
+                                peakBounds = peakBounds,
+                                quantData = quantData,
+                                shift = nTMTs,
+                                nFractions = nFractions
+                            )
+                    #print(out)
+                    if isLightQuantData:
+                        quantColumnNames = ["L_({})_tmt_intensity_{}".format(k,n) for n in range(nTMTs)]
+                    else:
+                        quantColumnNames = ["H_({})_tmt_intensity_{}".format(k,n) for n in range(nTMTs)]
 
-                for k,quantFile,isLightQuantData in quantFilesLoaded:
-                    print("Info :: Quantification of ", k)
-                    centerColumnName = "Center_{}".format(k)
-                    fwhmColumnName = "fwhm_{}".format(k)
-                    quantFileName = "Q({})".format(k)
-                    lowerBound = combinedPeakModels[centerColumnName] - combinedPeakModels[fwhmColumnName]/1.7
-                    upperBound = combinedPeakModels[centerColumnName] + combinedPeakModels[fwhmColumnName]/1.7
-
-                    peakBounds = np.concatenate([lowerBound.values.reshape(-1,1),upperBound.values.reshape(-1,1)],axis=1)
-                    peakBounds[:,1] += 1 #add one extra to use bounds as a range in python
-                    #check bounds
-                    peakBounds[peakBounds[:,0] < 0, 0] = 0
-                    peakBounds[peakBounds[:,1] >= quantFile.columns.size, 1] = quantFile.columns.size - 1
-                    #transform bounds to ints
-                    peakBounds = np.around(peakBounds,0).astype(np.int64)
-                    quantData = quantFile.loc[combinedPeakModels["Key"].values].values
-                   
-                    if self.params["analysisMode"] == "SILAC":
-                        print("Info :: Peak cetnric quantification using SILAC :: extracting mean from file {}.".format(k))
-                        out = extractMeanByBounds(
-                                    NPeakModels = combinedPeakModels.index.size, 
-                                    peakBounds = peakBounds,
-                                    quantData = quantData
-                                    )
-                        quantColumnNames = ["SILAC({})_Mean".format(quantFileName),"SILAC({})_Error".format(quantFileName)]
-
-                    elif self.params["analysisMode"] == "TMT":
-                        print("Info :: Peak centric quantification using TMT :: extracting sum from TMT reporters using file {}".format(self.params["quantFiles"][k]))
-                        print("Info :: Detecting reporter channles..")
-                        nFractions = self.Xs[k].shape[1]
-                        nTMTs = quantData.shape[1] / nFractions
-                        print("Info :: {} reporter channels detected and {} fractions.".format(nTMTs,nFractions))
-                        if nTMTs != int(nTMTs):
-                            print("Warning :: Could not detect the number of TMT reporter channles. Please check columns in quantFiles to have nTMTx x fractions columns")
-                            continue
-                        nTMTs = int(nTMTs)
-
-                        out = extractMetricByShiftBounds(
-                                    NPeakModels = combinedPeakModels.index.size, 
-                                    peakBounds = peakBounds,
-                                    quantData = quantData,
-                                    shift = nTMTs,
-                                    nFractions = nFractions
-                                )
-                        quantColumnNames = []
-
-
-                    elif self.params["analysisMode"] == "SILAC-TMT":
-                        print("Info :: Extracting quantification details from SILAC-TMT data.")
-                        print("Info :: Detecting reporter channles..")
-                        nFractions = self.Xs[k].shape[1]
-                        nTMTs = quantData.shape[1] / nFractions
-                        print("Info :: {} reporter channels detected and {} fractions.".format(nTMTs,nFractions))
-                        if nTMTs != int(nTMTs):
-                            print("Warning :: Could not detect the number of TMT reporter channles. Please check columns in quantFiles to have nTMTx x fractions columns")
-                            continue
-                        nTMTs = int(nTMTs)
-                        
-                        print(peakBounds)
-                        print(combinedPeakModels["Key"])
-                        print(isLightQuantData)
-                        quantData[quantData == 0.0] = np.nan
-                        out = extractMetricByShiftBounds(
-                                    NPeakModels = combinedPeakModels.index.size, 
-                                    peakBounds = peakBounds,
-                                    quantData = quantData,
-                                    shift = nTMTs,
-                                    nFractions = nFractions
-                                )
-                        print(out)
-                        if isLightQuantData:
-                            quantColumnNames = ["L_({})_tmt_intensity_{}".format(k,n) for n in range(nTMTs)]
-                        else:
-                            quantColumnNames = ["H_({})_tmt_intensity_{}".format(k,n) for n in range(nTMTs)]
-
-                       # print(a)
+                    # print(a)
 
                     dfResult = pd.DataFrame(out,index=combinedPeakModels.index, columns = quantColumnNames)
                     extractedQuantFiles.append(dfResult)
 
-                combinedPeakModels = combinedPeakModels.join(extractedQuantFiles)
-                txtOutput = os.path.join(self.params["pathToComb"],"CombinedPeakModelResultsQuant.txt")
-                combinedPeakModels.to_csv(txtOutput,sep="\t")
-
+            combinedPeakModels = combinedPeakModels.join(extractedQuantFiles)
+            txtOutput = os.path.join(self.params["pathToComb"],"CombinedPeakModelResultsQuant.txt")
+            combinedPeakModels.to_csv(txtOutput,sep="\t")
+           
     def _checkParameterInput(self):
         """
         Checks the input.
@@ -704,7 +719,7 @@ class ComplexFinder(object):
         if self.params["analysisMode"] not in validModes:
             raise ValueError("Parmaeter analysis mode is not valid. Must be one of: {}".format(validModes))
         elif self.params["analysisMode"] != "label-free" and len(self.params["quantFiles"]) == 0:
-            raise ValueError("Length 'quantFiles must be at least 1.")
+            raise ValueError("Length 'quantFiles must be at least 1 if the analysis mode is not set to 'label-free'.")
 
         if not isinstance(self.params["maxPeaksPerSignal"],int):
             raise ValueError("maxPeaksPerSignal must be an integer. Current setting: {}".forma(self.params["maxPeaksPerSignal"]))
@@ -995,7 +1010,11 @@ class ComplexFinder(object):
             
             dfProcessedSignal = pd.DataFrame().from_dict(validSignalData,orient="index")
             dfFit = pd.DataFrame().from_dict(fitDataSignal, orient="index")
-            
+            if self.params["removeSingleDataPointPeaks"]:
+                numberofPeaks = dict([(k,v.removedDataPoints) for k,v in signals.items() if v.valid and v.validModel and v.fitSignal is not None])
+                nRemovedData = pd.DataFrame().from_dict(numberofPeaks,orient="index")
+                nRemovedData.columns = ["#removedDataPoints"]
+                dfFit = dfFit.join(nRemovedData)
             #print(self.params["rawData"][analysisName].index)
             df = dfProcessedSignal.join(self.params["rawData"][analysisName],rsuffix="_raw",lsuffix="_processed")
             df = df.join(dfFit,rsuffix = "_fit")
@@ -1152,7 +1171,7 @@ class ComplexFinder(object):
         pathToPlotFolder = os.path.join(self.params["pathToTmp"][self.currentAnalysisName],"result","modelPlots")
         resultFolder = os.path.join(self.params["pathToTmp"][self.currentAnalysisName],"result")
 
-        fittedPeaksPath = os.path.join(resultFolder,"fittedPeaks.txt")
+        fittedPeaksPath = os.path.join(resultFolder,"fittedPeaks_{}.txt".format(self.currentAnalysisName))
         nPeaksPath = os.path.join(resultFolder,"nPeaks.txt")
         if os.path.exists(fittedPeaksPath) and os.path.exists(nPeaksPath):
             print("Warning :: FittedPeaks detected. If you changed the data, you have to set the paramter 'restartAnalysis' True to include changes..")
@@ -1243,6 +1262,7 @@ class ComplexFinder(object):
             
         else:
             dataForTraining = dataForTraining.groupby(dataForTraining['E1E2']).aggregate("min")
+
         dataForTraining['Class'] = dataForTraining['Class'].astype(np.int64)
         dataForTraining = dataForTraining.reset_index()
         
@@ -1321,7 +1341,7 @@ class ComplexFinder(object):
             self.stats.loc[self.currentAnalysisName,"nInteractions ({})".format(self.params["interactionProbabCutoff"])] = predInts.index.size
             return predInts
        # del self.Signals
-        gc.collect()   
+        #gc.collect()   
         #create prob columns of k fold 
         pColumns = ["Prob_{}".format(n) for n in range(len(self.classifier.predictors))]
         dfColumns = ["E1","E2","E1E2","apexPeakDist"] + [x if not isinstance(x,dict) else x["name"] for x in self.params["metrices"]] + pColumns + ["In DB"] 
@@ -1387,7 +1407,7 @@ class ComplexFinder(object):
         probData["F-measure(b=2)"] = (1+2**2) * ((probData["precision"] * probData["recall"]) / (((2**2) * probData["precision"]) + probData["recall"]))
         probData["F-measure(b=0.5)"] = (1+0.5**2)* ((probData["precision"] * probData["recall"]) / (((0.5**2) * probData["precision"]) + probData["recall"]))
         
-        self.params["interactionProbabCutoff"] = float(probData.idxmax().loc["F1-measure"])
+        #self.params["interactionProbabCutoff"] = float(probData.idxmax().loc["F1-measure"])
         print("Info :: Interaction probability was set to: {} based on the F-metric using beta = 1.".format(self.params["interactionProbabCutoff"] ))
         # boolPredIdx = classProba >= self.params["interactionProbabCutoff"]
         # if len(boolPredIdx.shape) > 1:
@@ -2064,8 +2084,8 @@ class ComplexFinder(object):
                     Xs, loadFiles = self._handleComptabFormat(X,loadFiles)
                 else:
                     Xs = [pd.read_csv(os.path.join(X,fileName), sep="\t") for fileName in loadFiles]
-                   # filterId = pd.read_csv(os.path.join("filter","Mito_d3.txt"),index_col=None)
-                   # Xs = [X.loc[X["Uniprot ID"].isin(filterId["Uniprot ID"].values)] for X in Xs]
+                    #filterId = pd.read_csv(os.path.join("filter","SPY.txt"),index_col=None)
+                    #Xs = [X.loc[X["Protein.Group"].isin(filterId["MouseMito"].values)] for X in Xs]
 
             
                 self.params["analysisName"] = loadFiles
@@ -2461,7 +2481,7 @@ class ComplexFinder(object):
             suffixedColumns.extend(["{}_{}".format(colName,analysisName) for colName in columnsForPeakFit])
             tmpFolder = self.params["pathToTmp"][analysisName]#os.path.join(".","tmp",analysisName)
             resultsFolder = os.path.join(tmpFolder,"result")
-            fittedPeaks = os.path.join(resultsFolder,"fittedPeaks.txt")
+            fittedPeaks = os.path.join(resultsFolder,"fittedPeaks_{}.txt".format(analysisName))
             if os.path.exists(fittedPeaks):
                 data = pd.read_csv(fittedPeaks,sep="\t")
                 if self.params["keepOnlySignalsValidInAllConditions"]:
@@ -2474,6 +2494,8 @@ class ComplexFinder(object):
             print("Info :: Aligning runs started.")
             fittedPeaksData = self._alignProfiles(fittedPeaksData)
 
+        if len(fittedPeaksData) == 0:
+            raise ValueError("Fitted Peaks not found?")
         uniqueKeys = np.unique(np.concatenate([x["Key"].unique().flatten() for x in fittedPeaksData]))
         print("Info :: {} unique keys detected".format(uniqueKeys.size))
 
@@ -2573,41 +2595,42 @@ class ComplexFinder(object):
 if __name__ == "__main__":
             #
     ComplexFinder(
-        addImpurity=0.0,
-        analysisMode= "SILAC-TMT",
+        
+        analysisMode= "label-free",
         considerOnlyInteractionsPresentInAllRuns = 1,
         compTabFormat = False,
         restartAnalysis = False,
-        recalculateDistance  = True,
-        retrainClassifier = False,
+        recalculateDistance  = False,
+        retrainClassifier = True,
         minPeakHeightOfMax= 0.01,
         takeRondomSampleFromData = False,
         justFitAndMatchPeaks = False,
         noDistanceCalculationAndPrediction = False,
-        runName = "0102",
+        runName = "largePore", #change analysis name
         noDatabaseForPredictions=False, 
         rollingWinType = "triang",
-        idColumn= "Uniprot",
-        #  databaseFileName="HUMAN_COMPLEX_PORTAL.txt",
-        #  databaseIDColumn= "Expanded participant list",
-        #  databaseEntrySplitString = "|",
-        grouping = {"C":["signalProfiles.txt"]},
+        idColumn= "Protein.Group", #adjust the Id column here.
+        grouping = {}, ##add your grouping here
         n_jobs = 12,
-        databaseFilter = {'Organism': ["Human"]},
+        databaseFilter = {'Organism': ["Mouse"]},
         indexIsID =False,
         decoySizeFactor= 1.1,
         classifierClass="random forest",
-        minDistanceBetweenTwoPeaks = 3,
-        smoothWindow = 3,
+        minDistanceBetweenTwoPeaks = 1,
+        smoothWindow = 2,
         classifierTestSize = 0.20,
-        plotSignalProfiles = False,
-        correlationWindowSize = 8,
-        interactionProbabCutoff = 0.8,
-       # usePeakCentricFeatures = True, ## careful, eperimental!
+        maxPeaksPerSignal=20,
+        smoothSignal=False,
+        plotSignalProfiles = True,
+        r2Thresh=-200.0,
+        correlationWindowSize = 5,
+        interactionProbabCutoff = 0.7,
+        minimumPPsPerFeature = 2,
+        #usePeakCentricFeatures = True, ## careful, eperimental!
         removeSingleDataPointPeaks=True, 
-        keepOnlySignalsValidInAllConditions = True,
-        quantFiles = {"HEAVY_signalProfiles.txt":"../example-data/0102/q/H_TMT.txt","LIGHT_signalProfiles.txt":"../example-data/0102/q/L_TMT.txt"},
-        useRawDataForDimensionalReduction = False).run("../example-data/0102")
+        keepOnlySignalsValidInAllConditions = False,
+        quantFiles = {}, 
+        useRawDataForDimensionalReduction = False).run("../example-data/ADD YOUR FOLDER") #adjust the folder where the files are sstored
                     
                
                

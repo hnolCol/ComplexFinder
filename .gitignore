@@ -134,6 +134,11 @@ results/
 reference-data/20190823_CORUM.txt
 reference-data_
 src/modules/utils/
+src/filter/
 example-data/0102/signalProfiles.txt
 example-data/0102/q/H_TMT.txt
 example-data/0102/q/L_TMT.txt
+example-data/WT_KI_largePore
+example-data/iBAQ_per_experiment
+example-data/0102_iBAQ_ratioCount1
+example-data/0102

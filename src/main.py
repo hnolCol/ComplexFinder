@@ -10,7 +10,7 @@ import shutil
 from datetime import datetime
 
 #internal imports 
-from modules.Signal import Signal
+from modules.signal import Signal
 from modules.Database import Database
 from modules.Predictor import Classifier, ComplexBuilder
 from modules.utils import calculateDistanceP, chunks, cleanPath, minMaxNorm, extractMeanByBounds, extractMetricByShiftBounds

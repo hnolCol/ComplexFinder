@@ -16,8 +16,7 @@ import gc
 
 
 def minMaxNorm(X,axis=0):
-    ""
-    #transformedColumnNames = ["0-1({}):{}".format("row" if axis else "column",col) for col in columnNames.values]
+    "Normalize array betweem 0 and 1"
     Xmin = np.nanmin(X,axis=axis, keepdims=True)
     Xmax = np.nanmax(X,axis=axis,keepdims=True)
     X_transformed = (X - Xmin) / (Xmax-Xmin)
@@ -45,9 +44,6 @@ def init_w(w, n):
 
 @jit(fastmath=True)
 def _apexDistance(mu1,mu2,s1,s2):
-
-    # if gamma:
-    #         return np.sqrt( (p1['mu'] - p2['mu']) ** 2  + (p1['sigma'] - p2['sigma']) ** 2 + (p1['gamma'] - p2['gamma']) ** 2)
     
     return np.sqrt( (mu1 - mu2) ** 2  + (s1 - s2) ** 2 )
 
@@ -76,6 +72,7 @@ def _apexScore(ownPeaks,otherSignalPeaks):
 
 @jit()
 def signalDifference(nY,Ys):
+    "Calculates the absolute difference between two arrays."
     r = np.empty(shape=Ys.shape)
     Y1 = nY.reshape(1,Ys.shape[1])
     for n in range(Ys.shape[0]):
@@ -86,15 +83,6 @@ def signalDifference(nY,Ys):
                 r[m,n] = 1
     return r 
     
-
-    # apexDist = []    
-    # apexMinArg = [] 
-    # for otherPeaks in otherSignalPeaks:
-            
-    #         apexDistCalc, minPeaks = map(list,zip(*[(_apexDistance(p1,p2,gamma),("{}_{}".format(p1["ID"],p2["ID"]))) for p1 in ownPeaks for p2 in otherPeaks]))
-    #         apexDist.append(apexDistCalc)
-    #         apexMinArg.append(minPeaks)
-
 
 @jit()
 def umapDistance(xa,ya,otherSignalEmbeddings):
@@ -123,14 +111,13 @@ def _pearson(u,v):
     Tuple of 1- pearson correlation and the p value 
 
     """
-   # @numba.jit
-#def _numba_corr(v1, v2, method):
     return 1 - np.corrcoef(u, v)[0,1]
 
 
 
 @jit()
 def pearson(nY,Ys):
+    "Calcualtes pearson correlation."
     return [_pearson(nY,Y) for Y in Ys]
 
 
@@ -313,7 +300,6 @@ class DistanceCalculator(object):
         "Calculates Apex Distance"
         out = []
         
-        #sizes = [(n,otherPeaks["IDs"].size) for n,otherPeaks in enumerate(otherSignalPeaks)]
         E2s = []
         E1 = []
         XX = pd.DataFrame(columns=["E1","E2","id1","id2","apex"])
@@ -332,22 +318,10 @@ class DistanceCalculator(object):
 
         XX.loc[:,"E1"] = E1 
         XX.loc[:,"E2"] = E2s 
-        XX.loc[:,["id1","id2","apex"]] = rr# XX.append({"E1":E1,"E2":E2s,"id1":rr[:,0],"id1":rr[:,1],"apex":rr[:,2]},ignore_index=True)
+        XX.loc[:,["id1","id2","apex"]] = rr
  
         return out, XX
         
-
-    #    # apexDist,apexMinArg = _apexScore(self.ownPeaks,otherSignalPeaks,"gamma" in self.ownPeaks[0])
-    #     apexDist = []    
-    #     apexMinArg = [] 
-    #     for otherPeaks in otherSignalPeaks:
-            
-    #         apexDistCalc, minPeaks = map(list,zip(*[(_apexDistance(p1["mu"],p2["mu"],p1["sigma"],p2["sigma"]),("{}_{}".format(p1["ID"],p2["ID"]))) for p1 in self.ownPeaks for p2 in otherPeaks]))
-    #         apexDist.append(apexDistCalc)
-    #         apexMinArg.append(minPeaks)
-        
-    #     return [(np.min(x),apexMinArg[n][np.argmin(x)]) for n,x in enumerate(apexDist)]
-
     def cosine(self):
         """
         Calculates 1-cosine distance

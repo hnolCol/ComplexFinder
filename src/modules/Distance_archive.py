@@ -71,7 +71,6 @@ class DistanceCalculator(object):
         self.ownPeaks = ownPeaks
         self.metrices = metrices
         self.otherSignalPeaks = otherSignalPeaks
-        #print(self.otherSignalPeaks)
         self.pathToTmp = pathToTmp
         self.embedding = embedding
         self.otherSignalEmbeddings = otherSignalEmbeddings

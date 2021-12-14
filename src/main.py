@@ -10,7 +10,7 @@ import shutil
 from datetime import datetime
 
 #internal imports 
-from modules.signal import Signal
+from modules.Signal import Signal
 from modules.Database import Database
 from modules.Predictor import Classifier, ComplexBuilder
 from modules.utils import calculateDistanceP, chunks, cleanPath, minMaxNorm, extractMeanByBounds, extractMetricByShiftBounds
@@ -1953,8 +1953,8 @@ class ComplexFinder(object):
         else:
             analysisName = str(self.params["analysisName"])
 
+        #check if results folder exists.
         pathToTmp = os.path.join(".","results")
-        
         if not os.path.exists(pathToTmp):
             os.mkdir(pathToTmp)
         self.currentAnalysisName = analysisName
@@ -2595,7 +2595,6 @@ class ComplexFinder(object):
 if __name__ == "__main__":
             #
     ComplexFinder(
-        
         analysisMode= "label-free",
         considerOnlyInteractionsPresentInAllRuns = 1,
         compTabFormat = False,
@@ -2606,23 +2605,23 @@ if __name__ == "__main__":
         takeRondomSampleFromData = False,
         justFitAndMatchPeaks = False,
         noDistanceCalculationAndPrediction = False,
-        runName = "largePore", #change analysis name
+        runName = "D1_exampleTest", #change analysis name
         noDatabaseForPredictions=False, 
         rollingWinType = "triang",
-        idColumn= "Protein.Group", #adjust the Id column here.
-        grouping = {}, ##add your grouping here
-        n_jobs = 12,
-        databaseFilter = {'Organism': ["Mouse"]},
+        idColumn= "Uniprot ID", #adjust the Id column here.
+        grouping = {"interphase":["D1_interphase.txt"],"mitosis":["D1_mitosis.txt"]}, ##add your grouping here
+        n_jobs = 8,
+        databaseFilter = {'Organism': ["Human"]},
         indexIsID =False,
         decoySizeFactor= 1.1,
         classifierClass="random forest",
         minDistanceBetweenTwoPeaks = 1,
-        smoothWindow = 2,
+        smoothWindow = 3,
         classifierTestSize = 0.20,
         maxPeaksPerSignal=20,
-        smoothSignal=False,
+        smoothSignal=True,
         plotSignalProfiles = True,
-        r2Thresh=-200.0,
+        r2Thresh = 0.75,
         correlationWindowSize = 5,
         interactionProbabCutoff = 0.7,
         minimumPPsPerFeature = 2,
@@ -2630,7 +2629,7 @@ if __name__ == "__main__":
         removeSingleDataPointPeaks=True, 
         keepOnlySignalsValidInAllConditions = False,
         quantFiles = {}, 
-        useRawDataForDimensionalReduction = False).run("../example-data/ADD YOUR FOLDER") #adjust the folder where the files are sstored
+        useRawDataForDimensionalReduction = False).run("../example-data/D1") #adjust the folder where the files are sstored
                     
                
                

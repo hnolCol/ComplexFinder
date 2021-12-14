@@ -100,10 +100,6 @@ class Classifier(object):
                                         n_jobs=self.n_jobs,
                                         random_state=42)
                                                         
-                                # RandomForestClassifier(n_estimators=200,BalancedRandomForestClassifier
-                                #             oob_score=True,
-                                #             min_samples_split=2,
-                                #             n_jobs=self.n_jobs)
         elif self.classifierClass == "SVM":
             
             return SVC(gamma=2, C=1, probability=True)

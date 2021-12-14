@@ -94,7 +94,12 @@ class Database(object):
             self._loadFileToPandas(f,folderPath)
         
     
-    def _filterDb(self,ID, filterDict,complexIDsColumn,complexNameColumn,complexNameFilterString):
+    def _filterDb(self,
+                    ID,
+                    filterDict,
+                    complexIDsColumn,
+                    complexNameColumn,
+                    complexNameFilterString):
         ""
         if ID in self.dbs:
             columnNames = list(filterDict.keys())
@@ -142,7 +147,7 @@ class Database(object):
         if self._checkIfFilteredFileExists(dbID,filterDb):
 
             self.df = self._loadFile()
-            print("File was saved already and is loaded")
+            print("File has been saved already and has been loaded.")
 
         else:
 
@@ -467,10 +472,12 @@ class Database(object):
 
         if ID in self.dbs:
             if hasattr(self,"filteredDfToMatch") == False:
-               
-                columnNames = list(filterDict.keys())
-                boolIdx = self.dbs[ID].isin(filterDict)[columnNames].sum(axis=1) == len(columnNames)
-                self.filteredDfToMatch = self.dbs[ID].loc[boolIdx,:]
+                if len(filterDict) == 0:
+                    self.filteredDfToMatch = self.dbs[ID]
+                else:
+                    columnNames = list(filterDict.keys())
+                    boolIdx = self.dbs[ID].isin(filterDict)[columnNames].sum(axis=1) == len(columnNames)
+                    self.filteredDfToMatch = self.dbs[ID].loc[boolIdx,:]
             
             boolIdxC = [] 
             splitIDs = e.split(";")

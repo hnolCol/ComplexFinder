@@ -1595,7 +1595,7 @@ class ComplexFinder(object):
             print("No database provided. UMAP and clustering will be performed using defaultKwargs. (noDatabaseForPredictions = True)")
 
         pathToFolder = self._makeFolder(self.params["pathToComb"],"complexIdentification_{}".format(self.params["addImpurity"]))
-
+        
         if not self.params["databaseHasComplexAnnotations"] and not self.params["noDatabaseForPredictions"] and predInts is not None:
             print("Database does not contain complex annotations. Therefore standard UMAP settings are HDBSCAN settings are used for complex identification.")
             cb.set_params(self.params["hdbscanDefaultKwargs"])
@@ -1766,7 +1766,7 @@ class ComplexFinder(object):
                 df, score, matchingResults = self._scoreComplexes(df)
                 
             # df = df.join(assignedIDs[["ComplexID"]])
-                if True:#maxScore > score:
+                if True:#maxScore > score: # write out all 
                     df.to_csv(os.path.join( pathToFolder,"Complexes:{}_{}_{}.txt".format(groupName,n,score)),sep="\t")
                     matchingResults.to_csv(os.path.join( pathToFolder,"ComplexPerEntry(ScoreCalc):{}_{}_{}.txt".format(groupName,n,score)),sep="\t")
                     print("Info :: Current best params ... ")
@@ -1801,8 +1801,12 @@ class ComplexFinder(object):
                         for sampleN,fileName in enumerate(groupFiles):
                             rawDataMerge[sampleN].columns = ["{}_({}):F{}".format(colName,fileName,sampleN) for colName in rawDataMerge[sampleN].columns]
                     dfEmbed = dfEmbed.join(other = rawDataMerge)
-                    dfEmbed.to_csv(os.path.join(pathToFolder,"UMAP_Embeding_{}_{}_{}.txt".format(n,params,groupName)),sep="\t")
-                    
+                    try:
+                        dfEmbed.to_csv(os.path.join(pathToFolder,"UMAP_Embeding_{}_{}.txt".format(n,groupName)),sep="\t")
+                    except:
+                        print("Saving umap embedding failed.")
+                        
+
                     #plot embedding.
                     fig, ax = plt.subplots()
                     ax.scatter(embedd["UMAP_0"].values, embedd["UMAP_1"].values,s=50, c=clusterLabels, cmap='Spectral')
@@ -2612,6 +2616,7 @@ if __name__ == "__main__":
         grouping = {"interphase":["D1_interphase.txt"],"mitosis":["D1_mitosis.txt"]}, ##add your grouping here
         n_jobs = 8,
         databaseFilter = {'Organism': ["Human"]},
+        databaseFileName="CORUM.txt",
         indexIsID =False,
         decoySizeFactor= 1.1,
         classifierClass="random forest",

@@ -274,7 +274,7 @@ class Signal(object):
                         name=prefix+'sigma', 
                         value = 0.20,
                         min = 0.01, 
-                        max = 1.3)
+                        max = 3)
         else:
 
             self._addParam(modelParams,

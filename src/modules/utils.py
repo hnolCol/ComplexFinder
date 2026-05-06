@@ -91,7 +91,7 @@ def calculateDistanceP(pathToFile):
     """
     with open(pathToFile,"rb") as f:
         chunkItems = pickle.load(f)
-    exampleItem = chunkItems[0] #used to get specfici chunk name to save under same name
+    exampleItem = chunkItems[0] #used to get specific chunk name to save under same name
     if "chunkName" in exampleItem:
         XX = [DistanceCalculator(**c).calculateMetrices() for c in chunkItems]
         data = np.concatenate([X[0] for X in XX],axis=0)

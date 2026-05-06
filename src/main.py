@@ -117,70 +117,70 @@ entriesInChunks = dict()
 class ComplexFinder(object):
 
     def __init__(self,
-                addImpurity = 0.0,
-                alignMethod = "RadiusNeighborsRegressor",#"RadiusNeighborsRegressor",#"KNeighborsRegressor",#"LinearRegression", # RadiusNeighborsRegressor
-                alignRuns = False,
-                alignWindow = 3,
-                allowSingleFractionQuant = False,
-                analysisMode = "label-free", #[label-free,SILAC,SILAC-TMT]
-                analysisName = None,
-                binaryDatabase = False,
-                classifierClass = "random_forest",
-                classifierTestSize = 0.25,
-                classiferGridSearch = RF_GRID_SEARCH,#STACKING_CLASSIFIER_GRID,#
-                compTabFormat = False,
-                considerOnlyInteractionsPresentInAllRuns = 2,
-                correlationWindowSize = 5,
-                databaseFilter = {'Organism': ["Human"]},#{'Organism': ["Human"]},#{"Confidence" : [1,2,3,4]} - for hu.map2.0,# {} for HUMAN_COMPLEX_PORTAL
-                databaseIDColumn = "subunits(UniProt IDs)",
-                databaseFileName = "20190823_CORUM.txt",#"humap2.txt
-                databaseHasComplexAnnotations = True,
-                databaseEntrySplitString = ";",
-                decoySizeFactor = 1.2,
-                grouping = {"WT": ["D3_WT_03.txt"]},
-                hdbscanDefaultKwargs = {"min_cluster_size":4,"min_samples":1},
-                indexIsID = False,
-                idColumn = "Uniprot ID",
-                interactionProbabCutoff = 0.7,
-                justFitAndMatchPeaks = False,
-                keepOnlySignalsValidInAllConditions = False,
-                kFold = 3,
-                maxPeaksPerSignal = 15,
-                maxPeakCenterDifference = 1.8,
-                metrices = ["apex","pearson","euclidean","cosine","max_location","rollingCorrelation"], #"umap-dist"
-                metricesForPrediction = None,#["pearson","euclidean","apex"],
-                metricQuantileCutoff = 0.001,
-                minDistanceBetweenTwoPeaks = 3,
-                minimumPPsPerFeature = 6,
-                minPeakHeightOfMax = 0.05,
-                n_jobs = 12,
-                noDatabaseForPredictions = False,
-                normValueDict = {},
-                noDistanceCalculationAndPrediction = False,
-                peakModel = "LorentzianModel",#"GaussianModel",#"SkewedGaussianModel",#"LorentzianModel",
-                plotSignalProfiles = False,
-                plotComplexProfiles = False,
-                precision = 0.5,
-                r2Thresh = 0.85,
-                removeSingleDataPointPeaks = True,
-                restartAnalysis = False,
-                retrainClassifier = False,
-                recalculateDistance = False,
-                rollingWinType = None,
-                runName = None,
-                scaleRawDataBeforeDimensionalReduction = True,
-                smoothSignal = True,
-                smoothWindow = 2,
-                takeRondomSampleFromData =False,
-                topNCorrFeaturesForUMAPAlignment = 200,
-                TMTPoolMethod = "sum",
-                transformQuantDataBy = None,
-                useRawDataForDimensionalReduction = False,
-                useFWHMForQuant = True,
-                umapDefaultKwargs = {"min_dist":0.001,"n_neighbors":5,"n_components":2,"random_state":120},
-                quantFiles = [],
-                usePeakCentricFeatures = False
-                ):
+                 addImpurity = 0.0,
+                 alignMethod = "RadiusNeighborsRegressor",  #"RadiusNeighborsRegressor",#"KNeighborsRegressor",#"LinearRegression", # RadiusNeighborsRegressor
+                 alignRuns = False,
+                 alignWindow = 3,
+                 allowSingleFractionQuant = False,
+                 analysisMode = "label-free",  #[label-free,SILAC,SILAC-TMT]
+                 analysisName = None,
+                 binaryDatabase = False,
+                 classifierClass = "random_forest",
+                 classifierTestSize = 0.25,
+                 classiferGridSearch = RF_GRID_SEARCH,  #STACKING_CLASSIFIER_GRID,#
+                 compTabFormat = False,
+                 considerOnlyInteractionsPresentInAllRuns = 2,
+                 correlationWindowSize = 5,
+                 databaseFilter = {'Organism': ["Human"]},  #{'Organism': ["Human"]},#{"Confidence" : [1,2,3,4]} - for hu.map2.0,# {} for HUMAN_COMPLEX_PORTAL
+                 databaseIDColumn = "subunits(UniProt IDs)",
+                 databaseFileName = "20190823_CORUM.txt",  #"humap2.txt
+                 databaseHasComplexAnnotations = True,
+                 databaseEntrySplitString = ";",
+                 decoySizeFactor = 1.2,
+                 grouping = {"WT": ["D3_WT_03.txt"]},
+                 hdbscanDefaultKwargs = {"min_cluster_size":4,"min_samples":1},
+                 indexIsID = False,
+                 idColumn = "Uniprot ID",
+                 interactionProbabCutoff = 0.7,
+                 justFitAndMatchPeaks = False,
+                 keepOnlySignalsValidInAllConditions = False,
+                 kFold = 3,
+                 maxPeaksPerSignal = 15,
+                 maxPeakCenterDifference = 1.8,
+                 metrices = ["apex","pearson","euclidean","cosine","max_location","rollingCorrelation"],  #"umap-dist"
+                 metricesForPrediction = None,  #["pearson","euclidean","apex"],
+                 metricQuantileCutoff = 0.001,
+                 minDistanceBetweenTwoPeaks = 3,
+                 minimumPPsPerFeature = 6,
+                 minPeakHeightOfMax = 0.05,
+                 n_jobs = 12,
+                 noDatabaseForPredictions = False,
+                 normValueDict = {},
+                 noDistanceCalculationAndPrediction = False,
+                 peakModel = "LorentzianModel",  #"GaussianModel",#"SkewedGaussianModel",#"LorentzianModel",
+                 plotSignalProfiles = False,
+                 plotComplexProfiles = False,
+                 precision = 0.5,
+                 r2Thresh = 0.85,
+                 removeSingleDataPointPeaks = True,
+                 restartAnalysis = False,
+                 retrainClassifier = False,
+                 recalculateDistance = False,
+                 rollingWinType = None,
+                 runName = None,
+                 scaleRawDataBeforeDimensionalReduction = True,
+                 smoothSignal = True,
+                 smoothWindow = 2,
+                 takeRandomSampleFromData =False,
+                 topNCorrFeaturesForUMAPAlignment = 200,
+                 TMTPoolMethod = "sum",
+                 transformQuantDataBy = None,
+                 useRawDataForDimensionalReduction = False,
+                 useFWHMForQuant = True,
+                 umapDefaultKwargs = {"min_dist":0.001,"n_neighbors":5,"n_components":2,"random_state":120},
+                 quantFiles = [],
+                 usePeakCentricFeatures = False
+                 ):
         """
         Init ComplexFinder Class
 
@@ -192,8 +192,8 @@ class ComplexFinder(object):
 
         * alignRuns = False,
                     Alignment of runs is based on signal profiles that were found to have
-                    a single modelled peak. A refrence run is assign by correlation anaylsis
-                    and choosen based on a maximum R2 value. Then fraction-shifts per signal
+                    a single modelled peak. A reference run is assign by correlation analysis
+                    and chosen based on a maximum R2 value. Then fraction-shifts per signal
                     profile is calculated (must be in the window given by *alignWindow*).
                     The fraction residuals are then modelled using the method provided in
                     *alignMethod*. Model peak centers are then adjusted based on the regression results.
@@ -223,7 +223,7 @@ class ComplexFinder(object):
                     True indicates that the data are in the CompBat data format which was recently introduced.
                     In contrast to standard txt files generated by for example MaxQuant. It contains multiple
                     headers. More information can be found here https://www3.cmbi.umcn.nl/cedar/browse/comptab
-                    ComplexFinder will try to identifiy the samples and fractions and create separeted txt files.
+                    ComplexFinder will try to identify the samples and fractions and create separate txt files.
 
 
         * considerOnlyInteractionsPresentInAllRuns = 2,
@@ -311,7 +311,7 @@ class ComplexFinder(object):
         * peakModel = "GaussianModel",
                 Indicates which model should be used to model signal profiles. In principle all models from lmfit can be used.
                 However, the initial parameters are only optimized for GaussianModel and LaurentzianModel.
-                This might effect runtimes dramatically.
+                This might affect runtimes dramatically.
 
         * plotSignalProfiles = False,
             If True, each profile is plotted against the fractio along with the fitted models.
@@ -407,7 +407,7 @@ class ComplexFinder(object):
             "maxPeakCenterDifference" : maxPeakCenterDifference,
             "classiferGridSearch" : classiferGridSearch,
             "plotSignalProfiles" : plotSignalProfiles,
-            "savePeakModels" : True, #must be true to process pipeline, depracted, remove from class arguments.
+            "savePeakModels" : True, #must be true to process pipeline, deprecated, remove from class arguments.
             "removeSingleDataPointPeaks" : removeSingleDataPointPeaks,
             "grouping" : grouping,
             "analysisMode" : analysisMode,
@@ -439,7 +439,7 @@ class ComplexFinder(object):
             "quantFiles" : quantFiles,
             "compTabFormat" : compTabFormat,
             "correlationWindowSize" : correlationWindowSize,
-            "takeRondomSampleFromData" : takeRondomSampleFromData,
+            "takeRandomSampleFromData" : takeRandomSampleFromData,
             "minPeakHeightOfMax" : minPeakHeightOfMax,
             "justFitAndMatchPeaks" : justFitAndMatchPeaks,
             "keepOnlySignalsValidInAllConditions" : keepOnlySignalsValidInAllConditions,
@@ -484,7 +484,7 @@ class ComplexFinder(object):
     def _addMetricToStats(self,metricName, value):
         """
         Adds a metric to the stats data frame.
-        Does not check if metric is represent, if present,
+        Does not check if metric is present, if present,
         it will just overwrite.
 
         Parameters
@@ -534,8 +534,8 @@ class ComplexFinder(object):
         """
         if self.params["analysisMode"] == "label-free":
             if len(self.params["quantFiles"]) != 0:
-                print("Warning :: Quant files have been specified but anaylsis mode is label-free. Please define SILAC or TMT or SILAC-TMT")
-            print("Info :: Label-free mode selected. No additation quantification performed..")
+                print("Warning :: Quant files have been specified but analysis mode is label-free. Please define SILAC or TMT or SILAC-TMT")
+            print("Info :: Label-free mode selected. No additional quantification performed..")
             return
 
         if len(self.params["quantFiles"]) > 0:
@@ -556,7 +556,7 @@ class ComplexFinder(object):
                     print(k.split("HEAVY_",maxsplit=1))
                 initFilesFound = [k for k in self.params["quantFiles"].keys() if k.split("HEAVY_",maxsplit=1)[-1] in files or k.split("LIGHT_",maxsplit=1)[-1] in files]
 
-            print("Info :: For the following files and correpsonding co-elution profile data was detected")
+            print("Info :: For the following files and corresponding co-elution profile data was detected")
             print(initFilesFound)
             print("Warning :: other files will be ignored.")
 
@@ -567,12 +567,12 @@ class ComplexFinder(object):
 
             print("combining Peaks!!")
             if combinedPeakModels is None:
-                ## load combined peak reuslts
+                ## load combined peak results
                 txtOutput = os.path.join(self.params["pathToComb"],"CombinedPeakModelResults.txt")
                 if os.path.exists(txtOutput):
                     combinedPeakModels = pd.read_csv(txtOutput,sep="\t")
                 else:
-                    print("Warning :: Combined peak model reuslts not found. Deleted? Skipping peak centric quantification.")
+                    print("Warning :: Combined peak model results not found. Deleted? Skipping peak centric quantification.")
                     return
 
 
@@ -639,12 +639,12 @@ class ComplexFinder(object):
 
                 elif self.params["analysisMode"] == "TMT":
                     print("Info :: Peak centric quantification using TMT :: extracting sum from TMT reporters using file {}".format(self.params["quantFiles"][k]))
-                    print("Info :: Detecting reporter channles..")
+                    print("Info :: Detecting reporter channels..")
                     nFractions = self.Xs[k].shape[1]
                     nTMTs = quantData.shape[1] / nFractions
                     print("Info :: {} reporter channels detected and {} fractions.".format(nTMTs,nFractions))
                     if nTMTs != int(nTMTs):
-                        print("Warning :: Could not detect the number of TMT reporter channles. Please check columns in quantFiles to have nTMTx x fractions columns")
+                        print("Warning :: Could not detect the number of TMT reporter channels. Please check columns in quantFiles to have nTMTx x fractions columns")
                         continue
                     nTMTs = int(nTMTs)
 
@@ -662,12 +662,12 @@ class ComplexFinder(object):
 
                 elif self.params["analysisMode"] == "SILAC-TMT":
                     print("Info :: Extracting quantification details from SILAC-TMT data.")
-                    print("Info :: Detecting reporter channles..")
+                    print("Info :: Detecting reporter channels..")
                     nFractions = self.Xs[k].shape[1]
                     nTMTs = quantData.shape[1] / nFractions
                     print("Info :: {} reporter channels detected and {} fractions.".format(nTMTs,nFractions))
                     if nTMTs != int(nTMTs):
-                        print("Warning :: Could not detect the number of TMT reporter channles. Please check columns in quantFiles to have nTMTx x fractions columns")
+                        print("Warning :: Could not detect the number of TMT reporter channels. Please check columns in quantFiles to have nTMTx x fractions columns")
                         continue
                     nTMTs = int(nTMTs)
 
@@ -710,14 +710,14 @@ class ComplexFinder(object):
 
         Raises
         -------
-        ValueErrors if datatype if given parameters do not match.
+        ValueErrors if datatype of given parameters do not match.
 
         """
 
-        #check anaylsis mode
+        #check analysis mode
         validModes = ["label-free","SILAC","SILAC-TMT","TMT"]
         if self.params["analysisMode"] not in validModes:
-            raise ValueError("Parmaeter analysis mode is not valid. Must be one of: {}".format(validModes))
+            raise ValueError("Parameter analysis mode is not valid. Must be one of: {}".format(validModes))
         elif self.params["analysisMode"] != "label-free" and len(self.params["quantFiles"]) == 0:
             raise ValueError("Length 'quantFiles must be at least 1 if the analysis mode is not set to 'label-free'.")
 
@@ -770,7 +770,7 @@ class ComplexFinder(object):
 
     def _chunkPrediction(self,pathToChunk,classifier,nMetrices,probCutoff):
         """
-        Predicts for each chunk the proability for positive interactions.
+        Predicts for each chunk the probability for positive interactions.
 
         Parameters
         ----------
@@ -838,10 +838,10 @@ class ComplexFinder(object):
                 self.X = self.X.set_index(self.params["idColumn"])
                 self.X = self.X.astype(np.float32)
             else:
-                self.X = self.X.loc[self.X.index.drop_duplicates()] #remove duplicaates
+                self.X = self.X.loc[self.X.index.drop_duplicates()] #remove duplicates
                 self.X = self.X.astype(np.float32) #set dtype to 32 to save memory
-            if self.params["takeRondomSampleFromData"] != False and self.params["takeRondomSampleFromData"] > 50:
-                self.X = self.X.sample(self.params["takeRondomSampleFromData"])
+            if self.params["takeRandomSampleFromData"] != False and self.params["takeRandomSampleFromData"] > 50:
+                self.X = self.X.sample(self.params["takeRandomSampleFromData"])
                 print("Random samples taken from data. New data size {}".format(self.X.index.size))
             self.params["rawData"][self.currentAnalysisName] = self.X.copy()
         else:
@@ -863,11 +863,11 @@ class ComplexFinder(object):
 
         """
         if self.params["noDistanceCalculationAndPrediction"]:
-            print("noDistanceCalculationAndPrediction was enabled. No database laoded.")
+            print("noDistanceCalculationAndPrediction was enabled. No database loaded.")
             return
 
         if self.params["noDatabaseForPredictions"]:
-            print("Info ::  Parameter noDatabaseForPredictions was set to True. No database laoded.")
+            print("Info ::  Parameter noDatabaseForPredictions was set to True. No database loaded.")
             return
 
         print("Info :: Load positive set from data base")
@@ -882,7 +882,7 @@ class ComplexFinder(object):
            # self._addMetricToStats("nPositiveInteractions",dbSize)
         else:
 
-            self.DB.pariwiseProteinInteractions(
+            self.DB.pairwiseProteinInteractions(
                             self.params["databaseIDColumn"],
                             dbID = self.params["databaseFileName"],
                             filterDb=self.params["databaseFilter"])
@@ -896,9 +896,9 @@ class ComplexFinder(object):
 
             #add decoy to db
             if dbSize == 0:
-                raise ValueError("Warning :: No hits found in database. Check dabaseFilter keyword.")
+                raise ValueError("Warning :: No hits found in database. Check databaseFilter keyword.")
             elif dbSize < 150:
-                raise ValueError("Warining :: Less than 150 pairwise interactions found.")
+                raise ValueError("Warning :: Less than 150 pairwise interactions found.")
             elif dbSize < 200:
                 #raise ValueError("Filtered positive database contains less than 200 interactions..")
                 print("Warning :: Filtered positive database contains less than 200 interactions.. {}".format(dbSize))
@@ -909,7 +909,7 @@ class ComplexFinder(object):
 
 
     def _checkGroups(self):
-        "Checks grouping. For comparision of multiple co-elution data sets."
+        "Checks grouping. For comparison of multiple co-elution data sets."
 
         if isinstance(self.params["grouping"],dict):
             if len(self.params["grouping"]) == 0:
@@ -1091,7 +1091,7 @@ class ComplexFinder(object):
 
         Parameter
         ---------
-            chunkSize - int. default 30. Nuber of signals in a single chunk.
+            chunkSize - int. default 30. Number of signals in a single chunk.
 
         Returns
         -------
@@ -1154,7 +1154,7 @@ class ComplexFinder(object):
 
             self.signalChunks[analysisName] = [p for p in c if os.path.exists(p)] #
 
-        #saves signal chunls.
+        #saves signal chunks.
         dump(self.signalChunks,pathToSignalChunk)
 
 
@@ -1165,7 +1165,7 @@ class ComplexFinder(object):
 
         """
         if not self.params["savePeakModels"]:
-            print("!! Warning !! This parameter is depracted and from now on always true.")
+            print("!! Warning !! This parameter is deprecated and from now on always true.")
             self.params["savePeakModels"] = True
 
         pathToPlotFolder = os.path.join(self.params["pathToTmp"][self.currentAnalysisName],"result","modelPlots")
@@ -1174,7 +1174,7 @@ class ComplexFinder(object):
         fittedPeaksPath = os.path.join(resultFolder,"fittedPeaks_{}.txt".format(self.currentAnalysisName))
         nPeaksPath = os.path.join(resultFolder,"nPeaks.txt")
         if os.path.exists(fittedPeaksPath) and os.path.exists(nPeaksPath):
-            print("Warning :: FittedPeaks detected. If you changed the data, you have to set the paramter 'restartAnalysis' True to include changes..")
+            print("Warning :: FittedPeaks detected. If you changed the data, you have to set the parameter 'restartAnalysis' True to include changes..")
             return
         if not os.path.exists(resultFolder):
             os.mkdir(resultFolder)
@@ -1286,9 +1286,9 @@ class ComplexFinder(object):
             gridSearch = self.params["classiferGridSearch"],
             testSize = self.params["classifierTestSize"])
 
-        probabilites, meanAuc, stdAuc, oobScore, optParams, Y_test, Y_pred = self.classifier.fit(X,Y,kFold=self.params["kFold"],pathToResults=self.params["pathToComb"], metricColumns = metricColumnsForPrediction)
+        probabilities, meanAuc, stdAuc, oobScore, optParams, Y_test, Y_pred = self.classifier.fit(X,Y,kFold=self.params["kFold"],pathToResults=self.params["pathToComb"], metricColumns = metricColumnsForPrediction)
 
-        dataForTraining["PredictionClass"] = probabilites
+        dataForTraining["PredictionClass"] = probabilities
 
         #save prediction summary
         pathToFImport = os.path.join(self.params["pathToComb"],"PredictorSummary{}_{}.txt".format(self.params["metrices"],self.params["addImpurity"]))
@@ -1351,7 +1351,7 @@ class ComplexFinder(object):
 
         predInteractions = None
 
-        metricIdx = [n + 4 if "apex" in self.params["metrices"] else n + 3 for n in range(len(self.params["metrices"]))] #in order to extract from dinstances, apex creates an extra column (apex_dist)
+        metricIdx = [n + 4 if "apex" in self.params["metrices"] else n + 3 for n in range(len(self.params["metrices"]))] #in order to extract from distances, apex creates an extra column (apex_dist)
 
 
         for n,(X,nChunks) in enumerate(self._loadPairsForPrediction()):
@@ -1546,7 +1546,7 @@ class ComplexFinder(object):
 
         matchingResults = pd.DataFrame(columns = ["Entry","Cluster Labels","Complex ID", "NumberOfInteractionsInDB"])
         clearedEntries = pd.Series([x.split("_")[0] for x in complexDf.index], index=complexDf.index)
-        for c,d in self.DB.indentifiedComplexes.items():
+        for c,d in self.DB.identifiedComplexes.items():
 
             boolMatch = clearedEntries.isin(d["members"])
             clusters = complexDf.loc[boolMatch,"Cluster Labels"].values.flatten()
@@ -1936,7 +1936,7 @@ class ComplexFinder(object):
 
     def _makeTmpFolder(self, n = 0):
         """
-        Creates temporary fodler.
+        Creates temporary folder.
 
 
         Parameters
@@ -1946,7 +1946,7 @@ class ComplexFinder(object):
         Returns
         -------
         pathToTmp : str
-            ansolute path to tmp/anlysis name folder.
+            absolute path to tmp/anlysis name folder.
 
         """
 
@@ -1964,13 +1964,13 @@ class ComplexFinder(object):
         self.currentAnalysisName = analysisName
 
         date = datetime.today().strftime('%Y-%m-%d')
-        self.params["Date of anaylsis"] = date
+        self.params["Date of analysis"] = date
         runName = self.params["runName"] if self.params["runName"] is not None else self._randomStr(3)
         self.params["pathToComb"] = self._makeFolder(pathToTmp,"{}_n({})runs".format(runName,len(self.params["analysisName"])))
         print("Info :: Folder created in which combined results will be saved: " + self.params["pathToComb"])
         pathToTmpFolder = os.path.join(self.params["pathToComb"],analysisName)
         if os.path.exists(pathToTmpFolder):
-            print("Info :: Path to results folder exsists")
+            print("Info :: Path to results folder exists")
             if self.params["restartAnalysis"]:
                 print("Warning :: Argument restartAnalysis was set to True .. cleaning folder.")
                 #to do - shift to extra fn
@@ -2019,7 +2019,7 @@ class ComplexFinder(object):
         Returns
         -------
         detectedDataFrames : list of pd.DataFrame
-            list of identified data farmes from compbat file
+            list of identified data frames from comptab file
 
         fileNames : list of str
             Internal names <comptabfileName>:<sampleName>
@@ -2064,7 +2064,7 @@ class ComplexFinder(object):
         Returns
         -------
         pathToTmp : str
-            ansolute path to tmp/anlysis name folder.
+            absolute path to tmp/anlysis name folder.
 
         """
         self.allSamplesFound = False
@@ -2075,10 +2075,10 @@ class ComplexFinder(object):
         if isinstance(X,list) and all(isinstance(x,pd.DataFrame) for x in X):
             if self.params["compTabFormat"]:
                 raise TypeError("If 'compTabFormat' is True. X must be a path to a folder. Either set compTabFormat to False or provide a path.")
-            print("Multiple dataset detected - each one will be analysed separetely")
+            print("Multiple dataset detected - each one will be analysed separately")
             if self.params["analysisName"] is None or not isinstance(self.params["analysisName"],list) or len(self.params["analysisName"]) != len(X):
                 self.params["analysisName"] = [self._randomStr(10) for n in range(len(X))] #create random analysisNames
-                print("Info :: 'anylsisName' did not match X shape. Created random strings per dataframe.")
+                print("Info :: 'analysisName' did not match X shape. Created random strings per dataframe.")
 
         elif isinstance(X,str):
             if os.path.exists(X):
@@ -2153,7 +2153,7 @@ class ComplexFinder(object):
 
         endSignalTime = time.time()
 
-        self.params["runTimes"]["SignalFitting&Comparision"] = time.time() - self.params["runTimes"]["StartTime"]
+        self.params["runTimes"]["SignalFitting&Comparison"] = time.time() - self.params["runTimes"]["StartTime"]
 
         if not self.params["justFitAndMatchPeaks"]:
 
@@ -2162,7 +2162,7 @@ class ComplexFinder(object):
 
             self._createSignalChunks()
             for n,X in enumerate(X):
-                if n < len(self.params["analysisName"]): #happnes if others than txt file are present
+                if n < len(self.params["analysisName"]): #happens if others than txt file are present
                     self.currentAnalysisName = self.params["analysisName"][n]
                     print(self.currentAnalysisName," :: Starting distance calculations.")
 
@@ -2283,7 +2283,7 @@ class ComplexFinder(object):
                 boolIdx = combResults[groupItems] == "+"
 
                 if isinstance(boolIdx,pd.Series):
-                    #grouping equals 1 (groupItems, nonsenese (always ture), but repoted due to conisitency)
+                    #grouping equals 1 (groupItems, nonsense (always true), but reported due to consistency)
                     combResults["Complete in {}".format(groupName)] = boolIdx
                 else:
                     combResults["Complete in {}".format(groupName)] = np.sum(boolIdx,axis=1) == len(groupItems)
@@ -2453,7 +2453,7 @@ class ComplexFinder(object):
         """
         Combine Peak results. For each run, each signal profile per feature
         is represented by an ensemble of peaks. This function matches
-        the peaks using a maximimal distance of 1.8 by default defined
+        the peaks using a maximal distance of 1.8 by default defined
         by the parameter 'maxPeakCenterDifference'.
 
         Peak height or area under curve are compared using a t-test and or an ANOVA.
@@ -2606,7 +2606,7 @@ if __name__ == "__main__":
         recalculateDistance  = False,
         retrainClassifier = True,
         minPeakHeightOfMax= 0.01,
-        takeRondomSampleFromData = False,
+        takeRandomSampleFromData= False,
         justFitAndMatchPeaks = False,
         noDistanceCalculationAndPrediction = False,
         runName = "D1_exampleTest", #change analysis name
@@ -2630,8 +2630,8 @@ if __name__ == "__main__":
         correlationWindowSize = 5,
         interactionProbabCutoff = 0.7,
         minimumPPsPerFeature = 2,
-        #usePeakCentricFeatures = True, ## careful, eperimental!
+        #usePeakCentricFeatures = True, ## careful, experimental!
         removeSingleDataPointPeaks=True,
         keepOnlySignalsValidInAllConditions = False,
         quantFiles = {},
-        useRawDataForDimensionalReduction = False).run("../example-data/D1") #adjust the folder where the files are sstored
+        useRawDataForDimensionalReduction = False).run("../example-data/D1") #adjust the folder where the files are stored

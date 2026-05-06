@@ -77,7 +77,7 @@ class Classifier(object):
 
     def _initClassifier(self):
         """
-        Initiate Classifer
+        Initiate Classifier
 
         Parameters
         ----------
@@ -127,11 +127,11 @@ class Classifier(object):
         Feature scaling. Data are scaled by StandardScaler (0-1)
 
         Importantly, the scaler is not retrained once it was initiated
-        to ensure that the scaling remains similiar for predictors.
+        to ensure that the scaling remains similar for predictors.
 
         Parameters
         ----------
-        X : two dimensional numpy array (feature paris in rows)
+        X : two dimensional numpy array (feature pairs in rows)
             Distance matrix for feature pairs
 
 
@@ -153,7 +153,7 @@ class Classifier(object):
 
         Parameters
         ----------
-        X : two dimensional numpy array (feature paris in rows)
+        X : two dimensional numpy array (feature pairs in rows)
             Distance matrix for feature pairs
         Y : numpy array
             Array containing class labels of X (0,1)
@@ -181,7 +181,7 @@ class Classifier(object):
 
     def getFeatureImportance(self):
         """
-        Returns estimatore feature imporantance, if estimator allows for this.
+        Returns estimator feature importance, if estimator allows for this.
 
         Parameters
         ----------
@@ -215,7 +215,7 @@ class Classifier(object):
         Returns
         -------
         Two dimensional array (n feature pairs x predictors)
-        containing the class proability
+        containing the class probability
         if predictors (default: 3 - see fit function)
 
         """
@@ -247,7 +247,7 @@ class Classifier(object):
         X : two dimensional numpy array
             Distance matrix for feature pairs
         Y : np.array
-            Class labels (1 - 0) for postive
+            Class labels (1 - 0) for positive
             and negative interaction
         kFold : int
             Number of cross validations. Equals the number of predictors.
@@ -275,7 +275,7 @@ class Classifier(object):
         if self.gridSerach is not None and optimizedParams is None:
             optimizedClassifier, optimizedParams = self._gridOptimization(X_train,y_train)
         else:
-            print("Info :: Grid serach skipped. Automatically skipped when using Guassian NB or parameter 'classiferGridSearch' is None.")
+            print("Info :: Grid search skipped. Automatically skipped when using Gaussian NB or parameter 'classiferGridSearch' is None.")
             optimizedClassifier = self.classifier
         #cv = StratifiedShuffleSplit(n_splits=10, test_size=0.2)
         if optimizedParams is not None:
@@ -284,7 +284,7 @@ class Classifier(object):
 
         self.predictors = [optimizedClassifier]
         probasOut = optimizedClassifier.predict_proba(X)
-        #predict probabiliteis for complete data set to create a classfier report.
+        #predict probabilities for complete data set to create a classifier report.
         tprs = []
         aucs = []
         oobScore = np.nan

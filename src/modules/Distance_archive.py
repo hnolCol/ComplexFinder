@@ -43,21 +43,21 @@ class DistanceCalculator(object):
             Identifier of E1
 
         E2 : obj:`list`of obj `np.array`
-            Signal intensity of E2s. Disntances
-            betwenn ID and E2 are calculated.
-            The intensitiy profiles of E2s are uploaded from source.npy.
+            Signal intensity of E2s. Distances
+            between ID and E2 are calculated.
+            The intensity profiles of E2s are uploaded from source.npy.
 
         ownPeaks : obj:`list`of obj `dict`
             List of modelled peaks for Y. Required to calculate apex distance,
-            which is equal to the euclidean dinstance of the closest peaks.
+            which is equal to the euclidean distance of the closest peaks.
 
         metrices : obj:`list` of obj:`str` or obj`list` of obj`dict`
-            List of strings or dictionories of metrices used to calculate distance.
-            If dict is provided, two keys namely `fn`and `name`must be provided.
+            List of strings or dictionaries of metrices used to calculate distance.
+            If dict is provided, two keys namely `fn` and `name` must be provided.
             The name must be unique (if more than one dict is provided.)
 
         pathToTmp : string
-            Path to the temporary folder for the current anaylsis. Required to load
+            Path to the temporary folder for the current analysis. Required to load
             Signals (called Ys)
 
         chunkName : string

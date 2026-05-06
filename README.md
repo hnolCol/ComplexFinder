@@ -3,13 +3,13 @@
 <img src="/img/complexFinderLogo.png" height="150px">
 
  Finds complexes from Blue-Native and SEC Fractionation analyzed by Liquid Chromatogrpahy coupled to Mass Spectrometry. In
- principal it works with any separation technique resulting in co-elution signal profiles. To avoid licence issues and accumulation of old database files, please first download the database of choce (see below *Download Protein-Protein Interaction Data*).
+ principle it works with any separation technique resulting in co-elution signal profiles. To avoid licence issues and accumulation of old database files, please first download the database of choce (see below *Download Protein-Protein Interaction Data*).
 
 ## Next Feature (Testing) Implementations (05.2021)
 
 We list here several features that we will implement in the next versions. If checked, they are already available but might be still experimental.
 
-- [ ] Extend plotting capabibilties to extract profiles of features and complex
+- [ ] Extend plotting capabilities to extract profiles of features and complex
 ```python
 
 #plotting selected feature's profile
@@ -33,34 +33,34 @@ ComplexFinder(analysisName="<Created folder in results folder>").plotComplexProf
 
 ## Workflow
 
-For thousdands of features (peptides/protein) a signal was measured over different fractions. The applied technique separates protein clusters from each other. This package aims for different things:
+For thousands of features (peptides/protein) a signal was measured over different fractions. The applied technique separates protein clusters from each other. This package aims for different things:
 
 * signal processing including filtering, smoothing.
 * if more than one replicate is analysed, the profiles over fractions will be aligned.
 * identification of protein-protein interactions.
-* identification of protein cluster using diminesional reduction and density based clustering.
+* identification of protein cluster using dimensional reduction and density based clustering.
 
 ![Signal processing and protein-protein interaction prediction](/img/workflow.png)
 
-Importantly, ComplexFinder can also be utized to analyse the data without prior knowledge of protein connectivitiy (e.g. positive database). In this case, there are two options:
+Importantly, ComplexFinder can also be utilized to analyse the data without prior knowledge of protein connectivity (e.g. positive database). In this case, there are two options:
 
 * using raw profile signal intensities
 * distance between profile pairs
 
-which are then subjected for dimensional reduction and HDBSCAN clusering. Importantly, when using the raw profile intensities, the derived UMAP representation is aligned using the top N correlated features between samples (e.g. same protein across all samples).
+which are then subjected for dimensional reduction and HDBSCAN clustering. Importantly, when using the raw profile intensities, the derived UMAP representation is aligned using the top N correlated features between samples (e.g. same protein across all samples).
 
-As a next step, we want to identify clusters of proteins with predicted interaction. To this end, we are using the interaction probabiliy matrix obtained by the
+As a next step, we want to identify clusters of proteins with predicted interaction. To this end, we are using the interaction probability matrix obtained by the
 random forest classifier. We then apply the UMAP embedding calculton and apply HDBSCAN clustering. Again, we
-are using the CORUM database to quantify the the clustering result using the v-measure. Both techniques, UMAP and HDBSCAN are performed
+are using the CORUM database to quantify the clustering result using the v-measure. Both techniques, UMAP and HDBSCAN are performed
 using a paramter grid to cycle through different options and find the best clustering.
 
  ![Quantification](/img/quantDetails.png)
 
- In cases of uisng the raw signal intensity or the distance metrics, those data are subjected to dimensional reduction (UMAP) and clustering (HDBSCAN). Noteworthy, other clusering algorithmns are available and can be utilized. HDBSCAN is however the default.
+ In cases of using the raw signal intensity or the distance metrics, those data are subjected to dimensional reduction (UMAP) and clustering (HDBSCAN). Noteworthy, other clusering algorithmns are available and can be utilized. HDBSCAN is however the default.
 
 ## Depositing Data analyzed using ComplexFinder
 
-If you analyzed your data using ComplexFinder, we highly recommend to upload the data along the raw fiiles deposition at mass spectrometry repisatories such as PRIDE / ProteomeXChange or similiar. Especially, the params.json file which is written to the results folder is of particular interest in order to reproduce the data analysis. Of note, if you upload the complete result folder, other users will be able to analyse these data using the plotting utilities of ComplexFinder.
+If you analyzed your data using ComplexFinder, we highly recommend to upload the data along the raw files deposition at mass spectrometry repositories such as PRIDE / ProteomeXChange or similar. Especially, the params.json file which is written to the results folder is of particular interest in order to reproduce the data analysis. Of note, if you upload the complete result folder, other users will be able to analyse these data using the plotting utilities of ComplexFinder.
 
 ## Installation
 
@@ -87,14 +87,14 @@ pip3 install -r requirements.txt
 
 ## Usage Example
 
-Upon downlaod and extraction of the package. You can find example data in the example-data folder.
-To run the anaylsis, you can enter:
+Upon download and extraction of the package. You can find example data in the example-data folder.
+To run the analysis, you can enter:
 ```python
 from .src.main import ComplexFinder
 X = pd.read_table("./example-data/SILAC_01.txt", sep = "\t") #loading tab delimited txt file.
 ComplexFinder(analysisName = "ExampleRun_01").run(X)
 ```
-You can also pass a folder path to run. This will yield in the anaylsis of each txt file in the folder.
+You can also pass a folder path to run. This will yield in the analysis of each txt file in the folder.
 
 ```python
 import os
@@ -130,7 +130,7 @@ ComplexFinder(
 
 ### Complex Portal
 
-Go the [Complex Portal Website](https://www.ebi.ac.uk/complexportal/home) and download the database (save it as HUMAN_COMPLEX_PORTAL.txt) for the utilized organismn.
+Go the [Complex Portal Website](https://www.ebi.ac.uk/complexportal/home) and download the database (save it as HUMAN_COMPLEX_PORTAL.txt) for the utilized organism.
 
 
 ```python
@@ -146,7 +146,7 @@ ComplexFinder(
 
 ### hu.Map 2.0
 
-The hu.MAP 2.0 has recently beend published and is available at this [link](http://humap2.proteincomplexes.org).
+The hu.MAP 2.0 has recently been published and is available at this [link](http://humap2.proteincomplexes.org).
 
 ```python
 ComplexFinder(
@@ -162,7 +162,7 @@ ComplexFinder(
 
 The grouping parameter in ComplexFinder is used to group files, which is used to group replicates together.
 Assume, that we have 4 files, 2 KO and 2 WT files which we put together in the folder "./data".
-The grouping will be used to calculate pariwise statistics between fitted peaks. Moreover, complex prediction and protein-protein prediction summary.
+The grouping will be used to calculate pairwise statistics between fitted peaks. Moreover, complex prediction and protein-protein prediction summary.
 ```python
 pathToFiles = os.path.join(".","data")
 ComplexFinder(
@@ -192,7 +192,7 @@ Find below an overview about the extensive output of ComplexFinder.
 
 
 
-Please respect the respective liscence for the different databases.
+Please respect the respective license for the different databases.
 
 ## Parameters
 
@@ -200,7 +200,7 @@ Please respect the respective liscence for the different databases.
 
 Find below parameters to set. The default is given in brackets after the parameter name.
 * alignMethod = "RadiusNeighborsRegressor",
-* alignRuns = False, Alignment of runs is based on signal profiles that were found to have a single modelled peak. A refrence run is assign by correlation anaylsis and choosen based on a maximum R2 value. Then fraction-shifts per signal profile is calculated (must be in the window given by *alignWindow*). The fraction residuals are then modelled using the method provided in *alignMethod*. Model peak centers are then adjusted based on the regression results. Of note, the alignment is performed after peak-modelling and before distance calculations.
+* alignRuns = False, Alignment of runs is based on signal profiles that were found to have a single modelled peak. A reference run is assign by correlation analysis and chosen based on a maximum R2 value. Then fraction-shifts per signal profile is calculated (must be in the window given by *alignWindow*). The fraction residuals are then modelled using the method provided in *alignMethod*. Model peak centers are then adjusted based on the regression results. Of note, the alignment is performed after peak-modelling and before distance calculations.
 * alignWindow = 3, Number of fraction +/- single-peal profile are accepted for the run alignment.
 * analysisMode = "label-free", #[label-free,SILAC,SILAC-TMT]
 * analysisName = None,
@@ -212,40 +212,40 @@ Find below parameters to set. The default is given in brackets after the paramet
 * databaseFilter = {'Organism': ["Human"]}, Filter dict used to find relevant complexes from database. By default, the corum database is filtered based on the column 'Organism' using 'Mouse' as a search string. If no filtering is required, pass an empty dict {}.
 * databaseIDColumn = "subunits(UniProt IDs)",
 * databaseFileName = "20190823_CORUM.txt",
-* databaseHasComplexAnnotations = True, Indicates if the provided database does contain complex annotations. If you have a database with only pairwise interactions, this setting should be *False*. Clusters are identified by dimensional reduction and density based clustering (HDBSCAN). In order to alter UMAP and HDBSCAN settings use the kewywords *hdbscanDefaultKwargs* and *umapDefaultKwargs*.
+* databaseHasComplexAnnotations = True, Indicates if the provided database does contain complex annotations. If you have a database with only pairwise interactions, this setting should be *False*. Clusters are identified by dimensional reduction and density based clustering (HDBSCAN). In order to alter UMAP and HDBSCAN settings use the keywords *hdbscanDefaultKwargs* and *umapDefaultKwargs*.
 * decoySizeFactor = 1.2,
 * grouping = {"WT": ["D3_WT_04.txt","D3_WT_02.txt"],"KO":["D3_KO_01.txt","D3_KO_02.txt"]}, None or dict. Indicates which samples (file) belong to one group. Let's assume 4 files with the name 'KO_01.txt', 'KO_02.txt', 'WT_01.txt' and 'WT_02.txt' are being analysed. The grouping dict should like this : {"KO":[KO_01.txt','KO_02.txt'],"WT":['WT_01.txt','WT_02.txt']} in order to combine them for statistical testing (e.g. t-test of log2 transformed peak-AUCs). Note that when analysis multiple runs (e.g. grouping present) then calling ComplexFinder().run(X) - X must be a path to a folder containing the files.
 * hdbscanDefaultKwargs = {"min_cluster_size":4,"min_samples":1},
 * indexIsID = False,
 * idColumn = "Uniprot ID",
 * interactionProbabCutoff = 0.7, Cutoff for estimator probability. Interactions with probabilities below threshold will be removed.
-* kFold = 3, Cross validation of classifier optimiation.
+* kFold = 3, Cross validation of classifier optimization.
 * maxPeaksPerSignal = 15, Number of peaks allowed for on signal profile.
 * maxPeakCenterDifference = 1.8,
 * metrices = ["apex","pearson","euclidean","p_pearson","max_location","umap-dist"], Metrices to access distance between two profiles. Can be either a list of strings and/or dict. In case of a list of dicts, each dict must contain the keywords: 'fn' and 'name' providing a callable function with 'fn' that returns a single floating number and takes two arrays as an input.
 * metricesForPrediction = None,#["pearson","euclidean","apex"],
 * metricQuantileCutoff = 0.90,
 * minDistanceBetweenTwoPeaks = 3, distance in fractions (int) between two peaks. Setting this to a smaller number results in more peaks.
-* n_jobs = 12, number of workers to model peaks, to calculate distance pairs and to train and use the classifer.
+* n_jobs = 12, number of workers to model peaks, to calculate distance pairs and to train and use the classifier.
 * noDatabaseForPredictions = False, If you want to use ComplexFinder without any database. Set this to *True*.
 * normValueDict = {},
-* peakModel = "GaussianModel", which model should be used to model signal profiles. In principle all models from lmfit can be used. However, the initial parameters are only optimized for GaussianModel and LaurentzianModel. This might effect runtimes dramatically.
-* plotSignalProfiles = False, if True, each profile is plotted against the fractio along with the fitted models. If you are concerned about time, you might set this to False at the cost of losing visible asessment of the fit quality.
+* peakModel = "GaussianModel", which model should be used to model signal profiles. In principle all models from lmfit can be used. However, the initial parameters are only optimized for GaussianModel and LaurentzianModel. This might affect runtimes dramatically.
+* plotSignalProfiles = False, if True, each profile is plotted against the fraction along with the fitted models. If you are concerned about time, you might set this to False at the cost of losing visible assessment of the fit quality.
 * plotComplexProfiles = False,
 * precision = 0.5, Precision to use to filter protein-protein interactions. If None, the filtering will be performed based on the parameter *interactionProbabCutoff*.
 * r2Thresh = 0.85, R2 threshold to accept a model fit. Models below the threshold will be ignored.
 * removeSingleDataPointPeaks = True,
-* restartAnalysis = False, bool. Set True if you want to restart the anaylsis from scratch. If the tmp folder exsists, items and dirs will be deleted first.
+* restartAnalysis = False, bool. Set True if you want to restart the analysis from scratch. If the tmp folder exists, items and dirs will be deleted first.
 * retrainClassifier = False, if the trainedClassifier.sav file is found, the classifier is loaded and the training is skipped. If you change the classifierGridSearch, you should set this to True. This will ensure that the classifier training is never skipped.
 * recalculateDistance = False,
 * runName = None,
 * rollingWinType = "triang", the win type used for calculating the rolling metric. If None, all points are evenly weighted. Can be any string of scipy.signal window function.
             (https://docs.scipy.org/doc/scipy/reference/signal.windows.html#module-scipy.signal.windows)
-* <del>savePeakModels = True</del> *depracted. always True and will be removed in the next version*.
+* <del>savePeakModels = True</del> *deprecated. always True and will be removed in the next version*.
 * scaleRawDataBeforeDimensionalReduction = True, If raw data should be used (*useRawDataForDimensionalReduction*) enable this if you want to scale them. Scaling will be performed that values of each row are scaled between zero and one.
-* smoothSignal = True, Enable/disable smoothing. Defaults to True. A moving average of at least 3 adjacent datapoints is calculated using pandas rolling function. Effects the analysis time as well as the nmaximal number of peaks detected.
+* smoothSignal = True, Enable/disable smoothing. Defaults to True. A moving average of at least 3 adjacent datapoints is calculated using pandas rolling function. Effects the analysis time as well as the maximal number of peaks detected.
 * smoothWindow = 2,
-* topNCorrFeaturesForUMAPAlignment = 200, Using top N features to to align UMAP Embeddings. The features are ranked by using Pearson correlation coefficient,
+* topNCorrFeaturesForUMAPAlignment = 200, Using top N features to align UMAP Embeddings. The features are ranked by using Pearson correlation coefficient,
 * useRawDataForDimensionalReduction = False, Setting this to true, will force the pipeline to use the raw values for dimensional reduction. Distance calculations are not automatically turned off and the output is generated but they are not used.
 * umapDefaultKwargs = {"min_dist":0.0000001,"n_neighbors":3,"n_components":2},
 * quantFiles = [] list of str.
@@ -260,16 +260,16 @@ RF_GRID_SEARCH = {
                 }
 ```
 
-Sklearn library is used for predictions. Please check the comprehensive [documention](https://scikit-learn.org/stable/user_guide.html) for more details and for construction of a grid search dict.
+Sklearn library is used for predictions. Please check the comprehensive [documentation](https://scikit-learn.org/stable/user_guide.html) for more details and for construction of a grid search dict.
 
 # Database Quality
 
 For the prediction of protein-protein interactions the quality and size of the database is of importance.
 
-As a quick test, we performed predictions using 2000 randomly selected features of dataset D1 and siwtched the class labels (interactor vs non-interactor) of the database to train the classifier. We observed that the number of predicted protein-protein interaction was strongly reduced in after label switch of more than 5% of the features. We have used the CORUM human database for interactions. This highlights that the complexes in the database need to describe the complexome in the measured dataset accurately. The gold-standard is therefore the usage of a complex database that were experimentally validated, which is sadly often not possible due to the workload.
+As a quick test, we performed predictions using 2000 randomly selected features of dataset D1 and switched the class labels (interactor vs non-interactor) of the database to train the classifier. We observed that the number of predicted protein-protein interaction was strongly reduced in after label switch of more than 5% of the features. We have used the CORUM human database for interactions. This highlights that the complexes in the database need to describe the complexome in the measured dataset accurately. The gold-standard is therefore the usage of a complex database that were experimentally validated, which is sadly often not possible due to the workload.
 
 
-# Usin SILAC - TMT peak centric quantifiaction
+# Using SILAC - TMT peak centric quantification
 
 *in preparation*
 
@@ -280,14 +280,14 @@ ComplexFinder allows peak centric quantification using different quantification 
 
 TMT allows for multiplexing in complexome experiments by labeling peptides with different tags that can be distinguished by different reporter ions using LC-MS/MS. Therefore the result (for example from a MaxQuant analysis) that is required are:
 * ProteinGroups.txt -> Feature IDs (protein IDs) versus iBAQ intensity in columns. This file is the base file to extract the signal profiles and on which the peak modelling will be performed. Alternatively, you can also sum all the TMT intensities.
-* ProteinGroups.txt -> Feature IDs (protein IDs) versus the TMT Intensities per channel. If you performed a 10-plex TMT analysis, this would result in Protein ID + (fraction x 10 (TMT channels)) columns. The TMT intensties should be next to each other for each fraction, please see the figure below. TMT01_fraction_01, TMT02_fraction_01 ... TMT10_fraction_01, TMT01_fraction_02. It is advisable to put a leading zero in the MaxQuant experiment name to get the correct order straight away (otherwise you may run into such an order: 1,10,11,12,...,2,21)
+* ProteinGroups.txt -> Feature IDs (protein IDs) versus the TMT Intensities per channel. If you performed a 10-plex TMT analysis, this would result in Protein ID + (fraction x 10 (TMT channels)) columns. The TMT intensities should be next to each other for each fraction, please see the figure below. TMT01_fraction_01, TMT02_fraction_01 ... TMT10_fraction_01, TMT01_fraction_02. It is advisable to put a leading zero in the MaxQuant experiment name to get the correct order straight away (otherwise you may run into such an order: 1,10,11,12,...,2,21)
 
-For each peak in the samples, ComplexFinder will extract the TMT intensities and will aggreagte the fraction covered by the FWHM using a given function. By default the sum is used but can be changed to the mean as well (*TMTPoolMethod = "sum"). The data in the quantification files (feature IDs x TMT Intensities for each fraction) are not transformed at all. Therfore, if you use the mean, performing log2 transformation before averageing might be advisable. You can do this by setting the paramter *transformQuantDataBy = "log2"*. The available options are ["log2","ln",None]. None being the default which will use the provided values.
+For each peak in the samples, ComplexFinder will extract the TMT intensities and will aggregate the fraction covered by the FWHM using a given function. By default the sum is used but can be changed to the mean as well (*TMTPoolMethod = "sum"). The data in the quantification files (feature IDs x TMT Intensities for each fraction) are not transformed at all. Therefore, if you use the mean, performing log2 transformation before averaging might be advisable. You can do this by setting the parameter *transformQuantDataBy = "log2"*. The available options are ["log2","ln",None]. None being the default which will use the provided values.
 
 
 ## SILAC-TMT
 
-A combination of SILAC and TMT allows either for extended mulitplexing (2 x SILAC Channel + 10plex TMT = 20 samples) or to follow an incoporation kinetic. To this end, cells are grown on SILAC media (for example heavy) for several passages leading to fully labelled cells. Then, the media is exchanged to light media and the cell start incoporating light amino acids into newly synthesized proteins. This enabled the determination of incorporation rates / turnover rates. When combining TMT and SILAC together, the light channel peptides + TMT represent the SILAC incoporation and heavy shows the break-down of proteins. In proliferating cells, the increase in biomass (cell growth) has to be considered.
+A combination of SILAC and TMT allows either for extended multiplexing (2 x SILAC Channel + 10plex TMT = 20 samples) or to follow an incorporation kinetic. To this end, cells are grown on SILAC media (for example heavy) for several passages leading to fully labelled cells. Then, the media is exchanged to light media and the cell start incorporating light amino acids into newly synthesized proteins. This enabled the determination of incorporation rates / turnover rates. When combining TMT and SILAC together, the light channel peptides + TMT represent the SILAC incorporation and heavy shows the break-down of proteins. In proliferating cells, the increase in biomass (cell growth) has to be considered.
 
 *Please note that at the moment only two SILAC channels are supported*.
 
@@ -300,11 +300,11 @@ ComplexFinder(allowSingleFractionQuant = True).run(...)
 ```
 
 ![Quantification using SILAC - how to design the quantFiles parameter.](/img/TMT_SILAC_QUANT.png)
-*Figure. Quantification Stategy using TMT or SILAC-TMT experimental designs. In SILAC-TMT experimental designs, two quantification resutl files are required index by HEAVY and LIGHT.*
+*Figure. Quantification Strategy using TMT or SILAC-TMT experimental designs. In SILAC-TMT experimental designs, two quantification result files are required index by HEAVY and LIGHT.*
 
 We recommend to put the signal profiles in a folder (in the figure: myCoolAnalysis) and add the files. Create a new folder within myCoolAnalysis called 'q' in which you add the quantification data. If you put the quantification txt files in the same folder as the once for analysis, ComplexFinder will treat them as signal profiles and will try to fit model peaks to them etc.
 
-To calculated the fit parameter for a single order kinetic, we have to provide more information otherwise, the output will contain the TMT intensities for each peak indicated by *heavy* or *light*. ComplexFinder expects a raw TMT intensities (not log2) for
+To calculate the fit parameter for a single order kinetic, we have to provide more information otherwise, the output will contain the TMT intensities for each peak indicated by *heavy* or *light*. ComplexFinder expects a raw TMT intensities (not log2) for
 
 
 
@@ -389,7 +389,7 @@ def _addParams(self,modelParams,prefix,peakIdx,i):
         ## for the other parameters as well to get a nice fit.
 ```
 
-Please not that you also have to alter the functions *_getHeight* and *_getFWHM* for your peak models.
+Please note that you also have to alter the functions *_getHeight* and *_getFWHM* for your peak models.
 You can check the equations [here](http://openafox.com/science/peak-function-derivations.html).
 
 
@@ -397,7 +397,7 @@ You can check the equations [here](http://openafox.com/science/peak-function-der
 
 In the future, we would like to implement the following features:
 
-* Web application with an easy uster interface to proide easy access to the pipeline
+* Web application with an easy user interface to provide easy access to the pipeline
 * Implement more classifiers.
 * Test various peak models for better performance.
 

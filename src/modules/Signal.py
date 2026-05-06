@@ -40,12 +40,12 @@ class Signal(object):
         """Signal module for pre-processing and modeling
 
 
-        The Signal module allows to do severl pre-processing/modelling
+        The Signal module allows to do several pre-processing/modelling
         steps such as
             a) smoothing (rolling average)
             b) filtering by number of nonNaN values
             c) removal of single data points (surrounded by zeros or nans)
-            b) Peak detection (finds peaks) - required for further anaylsis
+            b) Peak detection (finds peaks) - required for further analysis
 
         The peak modelling allows for usage of `LorentzianModel` or `GaussianModel`
 
@@ -131,34 +131,34 @@ class Signal(object):
 
         """
         peaksFiltered = 0
-        flilteredY = []
+        filteredY = []
 
         for i,x in enumerate(self.Y):
             if i == 0: #first item is different
                 if self.Y[i+1] == 0:
-                    flilteredY.append(0)
+                    filteredY.append(0)
                     if self.Y[i] > 0:
                         peaksFiltered += 1
                 else:
-                    flilteredY.append(x)
+                    filteredY.append(x)
 
             elif i == self.Y.size - 1: #last item also
                 if self.Y[-1] != 0 and self.Y[-1]:
-                    flilteredY.append(0)
+                    filteredY.append(0)
                     if self.Y[i] > 0:
                         peaksFiltered += 1
                 else:
-                    flilteredY.append(x)
+                    filteredY.append(x)
 
             else:
                 if self.Y[i-1] == 0 and self.Y[i+1] == 0:
-                    flilteredY.append(0)
+                    filteredY.append(0)
                     if self.Y[i] > 0:
                         peaksFiltered += 1
                 else:
-                    flilteredY.append(x)
+                    filteredY.append(x)
 
-        return np.array(flilteredY), peaksFiltered
+        return np.array(filteredY), peaksFiltered
 
     def isValid(self, nonZero = 4):
         """Returns true if signal contains more than
@@ -173,7 +173,7 @@ class Signal(object):
 
         Returns
         -------
-        boolean, True if vald
+        boolean, True if valid
 
         """
         valid = np.sum(self.Y > 0) > nonZero
@@ -241,7 +241,7 @@ class Signal(object):
         Parameters
         ----------
 
-        mdeolParams :
+        modelParams :
             modelParam object. Returned by model.make_params() (lmfit package)
             Documentation: https://lmfit.github.io/lmfit-py/model.html
 
@@ -249,7 +249,7 @@ class Signal(object):
             Prefix for the model (e.g. peak), defaults to f'm{i}_'.format(i)
 
         peakIdx : int
-            Arary index at which the peak was detected in the Signal arary self.Y
+            Array index at which the peak was detected in the Signal array self.Y
 
         i : int
             index of detected models
@@ -263,7 +263,7 @@ class Signal(object):
 
 
         if self.avoidWideSmallPeaks and self.Y[peakIdx[i]] < np.max(self.Y) * 0.2:
-            #small peaks should not be to wide!
+            #small peaks should not be too wide!
             self._addParam(modelParams,
                             name=prefix+'amplitude',
                             max = self.Y[peakIdx[i]] * 1.2 * np.pi,
@@ -328,7 +328,7 @@ class Signal(object):
     def _checkPeakIdx(self,peakIdx, maxPeaks = 15):
         """
         Checks if number of peaks exceed the max number of
-        allwed peaks. (paramater: maxPeaks)
+        allowed peaks. (parameter: maxPeaks)
 
         If the number exceeds maxPeaks, the peaks with the
         highest value are taken. Others are removed
@@ -362,7 +362,7 @@ class Signal(object):
         """
         Fits the model (ensemble of several peaks).
         The number of models equals the number of
-        detected peaks. Please not that that the maximum
+        detected peaks. Please note that the maximum
         number of peaks is limited by the parameter:
 
             maxPeaks (defaults to 12)
@@ -371,7 +371,7 @@ class Signal(object):
 
             - peak models + signal profile are plotted and saved as pdf (folder modelPlots)
 
-            - if squaredR for the model fit is below threshold (r2Tresh - deufault 0.85), the
+            - if squaredR for the model fit is below threshold (r2Tresh - default 0.85), the
                 signal profile is ignored. A message is printed if this happens.
 
         Parameters

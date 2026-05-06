@@ -52,7 +52,7 @@ class Database(object):
     def __init__(self, nJobs = 4, splitString = ";"):
         """Database Module.
 
-        The pipeline requires a database containing positve feature interactions.
+        The pipeline requires a database containing positive feature interactions.
         This module find interactions present in the dataset to be analysed,
         creates decoy interactions and matches metrices to databases.
 
@@ -115,7 +115,7 @@ class Database(object):
                     raise ValueError("complexNameColumn not in database")
 
 
-    def pariwiseProteinInteractions(self,
+    def pairwiseProteinInteractions(self,
                                     complexIDsColumn,
                                     dbID = "20190823_CORUM.txt",
                                     filterDb = {'Organism': ["Human"]},
@@ -163,7 +163,7 @@ class Database(object):
         Adds a decoy database to the module.
 
         Random entries from positive data are taken and Fake
-        complexes are build. Self-ineractions (x1 == x2) are
+        complexes are build. Self-interactions (x1 == x2) are
         not allowed and ignored. Duplicated interactions are
         also ignored as well as positive Interactions that is
         reported in a different positive complex.
@@ -277,7 +277,7 @@ class Database(object):
                 else:
                     E1E2Type.append("decoy")
             else:
-                #if we get here, those itneractions cannot be positive or decoy
+                #if we get here, those interactions cannot be positive or decoy
                 e1 = E1s[n]
                 e2 = E2s[n]
 
@@ -353,7 +353,7 @@ class Database(object):
     def collectPairwiseInt(self,i,interactors,complexName,predictClass,splitString = ";"):
 
         collectedResult = []
-        for interaction in self._getPariwiseInteractions(interactors.split(splitString)):
+        for interaction in self._getPairwiseInteractions(interactors.split(splitString)):
                interaction = [e[:6] for e in interaction]
                collectedResult.append({"ComplexID":i,"E1":interaction[0],"E2":interaction[1],"E1E2":''.join(sorted(interaction)),"complexName":complexName,"Class":predictClass})
         return collectedResult
@@ -368,7 +368,7 @@ class Database(object):
         return df
 
 
-    def _getPariwiseInteractions(self,entryList):
+    def _getPairwiseInteractions(self, entryList):
         ""
         return itertools.combinations(entryList, 2)
 
@@ -426,23 +426,23 @@ class Database(object):
             return metricDf.loc[metricDf["E2E1"] == search,mCols]
 
     @property
-    def indentifiedComplexes(self):
+    def identifiedComplexes(self):
         if hasattr(self,'uniqueComplexesIdentified'):
             return self.uniqueComplexesIdentified
 
     def identifiableComplexes(self,complexMemberIds, ID = "20190823_CORUM.txt"):
         ""
-        identifiableMebmers = OrderedDict()
+        identifiableMembers = OrderedDict()
         if hasattr(self,'uniqueComplexesIdentified'):
             for k in self.uniqueComplexesIdentified.keys():
-                identifiableMebmers[k] = {}
+                identifiableMembers[k] = {}
                 boolIdx = self.dbs[ID].index == k
                 complexData = self.dbs[ID][boolIdx]
                 cMembers = complexData[complexMemberIds].tolist()[0].split(";")
-                identifiableMebmers[k]["n"] = len(cMembers)
-                identifiableMebmers[k]["members"] = cMembers
+                identifiableMembers[k]["n"] = len(cMembers)
+                identifiableMembers[k]["members"] = cMembers
 
-        return identifiableMebmers
+        return identifiableMembers
 
 
     def assignComplexToProtein(self, e, complexMemberIds, complexIDColumn, ID = "20190823_CORUM.txt", filterDict = {'Organism': ["Human"]}):
@@ -553,12 +553,12 @@ class Database(object):
 
     def _createChunks(self,pathToTmp,entriesInChunks,metricColumns):
         """
-        Craetes chunks
+        Creates chunks
 
 
         To do:
 
-        Parellelerize.
+        Parallelize.
 
         Parameters
         ----------
@@ -728,10 +728,10 @@ class Database(object):
     def fillComplexMatrixFromData(self, X):
         ""
         if not isinstance(X, pd.DataFrame):
-            raise ValueError("X must be a pandas data frame with index and columns containg ID")
+            raise ValueError("X must be a pandas data frame with index and columns containing ID")
 
         return X.merge(self.df,how="left",left_index=True,right_on="E1;E2")
 
 
 if __name__ == "__main__":
-    Database().pariwiseProteinInteractions("subunits(UniProt IDs)")
+    Database().pairwiseProteinInteractions("subunits(UniProt IDs)")

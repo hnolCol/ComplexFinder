@@ -15,7 +15,7 @@ import gc
 
 
 def minMaxNorm(X,axis=0):
-    "Normalize array betweem 0 and 1"
+    "Normalize array between 0 and 1"
     Xmin = np.nanmin(X,axis=axis, keepdims=True)
     Xmax = np.nanmax(X,axis=axis,keepdims=True)
     X_transformed = (X - Xmin) / (Xmax-Xmin)
@@ -116,7 +116,7 @@ def _pearson(u,v):
 
 @jit()
 def pearson(nY,Ys):
-    "Calcualtes pearson correlation."
+    """Calculates pearson correlation."""
     return [_pearson(nY,Y) for Y in Ys]
 
 
@@ -217,16 +217,16 @@ class DistanceCalculator(object):
             Identifier of E1
 
         E2 : obj:`list`of obj `np.array`
-            Signal intensity of E2s. Disntances
-            betwenn ID and E2 are calculated.
-            The intensitiy profiles of E2s are uploaded from source.npy.
+            Signal intensity of E2s. Distances
+            between ID and E2 are calculated.
+            The intensity profiles of E2s are uploaded from source.npy.
 
         ownPeaks : obj:`list`of obj `dict`
             List of modelled peaks for Y. Required to calculate apex distance,
-            which is equal to the euclidean dinstance of the closest peaks.
+            which is equal to the euclidean distance of the closest peaks.
 
         metrices : obj:`list` of obj:`str` or obj`list` of obj`dict`
-            List of strings or dictionories of metrices used to calculate distance.
+            List of strings or dictionaries of metrices used to calculate distance.
             If dict is provided, two keys namely `fn`and `name`must be provided.
             The name must be unique (if more than one dict is provided.)
 

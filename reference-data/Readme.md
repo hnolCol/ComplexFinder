@@ -24,7 +24,7 @@ ComplexFinder(
 
 ### Complex Portal
 
-Go the [Complex Portal Website](https://www.ebi.ac.uk/complexportal/home) and download the database (save it as HUMAN_COMPLEX_PORTAL.txt) for the utilized organismn.
+Go the [Complex Portal Website](https://www.ebi.ac.uk/complexportal/home) and download the database (save it as HUMAN_COMPLEX_PORTAL.txt) for the utilized organism.
 
 
 ```python
@@ -40,7 +40,7 @@ ComplexFinder(
 
 ### hu.Map 2.0
 
-The hu.MAP 2.0 has recently beend published and is available at this [link](http://humap2.proteincomplexes.org).
+The hu.MAP 2.0 has recently been published and is available at this [link](http://humap2.proteincomplexes.org).
 
 ```python
 ComplexFinder(

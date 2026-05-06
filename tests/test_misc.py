@@ -40,7 +40,7 @@ def test_workflow_completes():
             recalculateDistance=False,
             retrainClassifier=True,
             minPeakHeightOfMax=0.01,
-            takeRondomSampleFromData=False,
+            takeRandomSampleFromData=False,
             justFitAndMatchPeaks=False,
             noDistanceCalculationAndPrediction=False,
             runName="D1_exampleTest",

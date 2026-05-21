@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "complexfinder"
+version = "0.4.48"
+description = "ComplexFinder: A software package for the analysis of native protein complex fractionation experiments."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [
+    { name = "hnolCol" },
+]
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = [
+    "hdbscan",
+    "imbalanced-learn",
+    "joblib",
+    "lmfit",
+    "matplotlib",
+    "numpy>=2",
+    "pandas>=2",
+    "scikit-learn",
+    "scipy",
+    "seaborn",
+    "umap-learn",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=9"]
+
+[project.urls]
+"Source" = "https://github.com/hnolcol/ComplexFinder"
+
+[tool.pytest]
+minversion = "9.0"
+testpaths = [
+    "tests",
+]
+norecursedirs = [
+    "dist",
+    "build",
+    "complexfinder.egg-info",
+    "results*",
+    "env*",
+    "venv*",
+    "*data*",
+]

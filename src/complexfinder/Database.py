@@ -10,6 +10,8 @@ import itertools
 import time
 import pickle
 from collections import OrderedDict
+from pathlib import Path
+
 
 def chunks(l, n):
     """Yield successive n-sized chunks from l."""
@@ -49,7 +51,7 @@ def createSingleChunk(self,idx, entriesInChunks,pathToTmp,metricColumns,df):
 class Database(object):
 
 
-    def __init__(self, nJobs = 4, splitString = ";"):
+    def __init__(self, nJobs = 4, splitString = ";", databaseDir=None):
         """Database Module.
 
         The pipeline requires a database containing positve feature interactions.
@@ -62,19 +64,26 @@ class Database(object):
 
         Parameters
         ----------
-
-
+        databaseDir:
+            Directory to use for looking up reference files.
+            If `None`, the `reference-data` directory inside the
+            package root will be used. This is assumed to be writable.
         """
         self.dbs = dict()
         self.nJobs = nJobs
         self.splitString = splitString
         self.params = {"n_jobs":nJobs}
+
+        if databaseDir is None:
+           self.databaseDir = str(Path(__file__).parent / 'reference-data')
+        else:
+           self.databaseDir = databaseDir
+
         self._load()
 
     def _load(self):
         ""
-        folderPath = self._getPathToReferenceFiles()
-        self._loadFiles(folderPath)
+        self._loadFiles(self.databaseDir)
 
     def _loadFiles(self, folderPath):
         """
@@ -323,8 +332,7 @@ class Database(object):
     def _checkIfFilteredFileExists(self,dbID,filterDb):
         ""
         fileName = self._generateFileName(dbID,filterDb)
-        sourcePath = self._getPathToReferenceFiles()
-        self.pathToFile = os.path.join(sourcePath,fileName)
+        self.pathToFile = os.path.join(self.databaseDir, fileName)
         return os.path.exists(self.pathToFile)
 
     def _generateFileName(self,dbName,filterDb):
@@ -389,9 +397,8 @@ class Database(object):
     def _getPathToReferenceFiles(self):
         ""
         filePath = os.path.dirname(os.path.realpath(__file__))
-        mainPath = os.path.abspath(os.path.join(filePath ,"../.."))
         pathToReferenceFolder = os.path.join(
-                mainPath,
+                filePath,
                 'reference-data'
             )
         return pathToReferenceFolder

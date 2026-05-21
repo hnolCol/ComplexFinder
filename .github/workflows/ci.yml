@@ -15,10 +15,9 @@ jobs:
         with:
             python-version: '3.13'
 
-      - name: Install dependencies
+      - name: Install package
         run: |
-            pip install pandas scipy matplotlib lmfit joblib scikit-learn \
-              imbalanced-learn umap-learn hdbscan seaborn pytest
+            pip install .[test]
 
       - name: Run tests
         run: |

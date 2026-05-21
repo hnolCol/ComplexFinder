@@ -1,16 +1,15 @@
 import os
-import sys
+import shutil
 from pathlib import Path
-from tempfile import TemporaryDirectory
+from tempfile import TemporaryDirectory, tempdir
 
 import pandas as pd
 
-# update sys.path until there is a proper package installation
-sys.path.append(str(Path(__file__).parent.parent / "src"))
+from complexfinder import ComplexFinder
+from complexfinder.Database import Database
 
-from main import ComplexFinder
-
-SAMPLE_DATA_DIR = Path(__file__).parents[1] / "example-data"
+REPO_ROOT = Path(__file__).parents[1]
+SAMPLE_DATA_DIR = REPO_ROOT / "example-data"
 
 
 def test_workflow_completes():
@@ -71,3 +70,16 @@ def test_workflow_completes():
             useRawDataForDimensionalReduction=False).run(
             tmpdir
         )
+
+
+def test_custom_database_dir():
+    """Test that a custom database directory can be used."""
+    db_file = REPO_ROOT / "src" / "complexfinder" / "reference-data" / "CORUM.txt"
+    with TemporaryDirectory() as tmpdir:
+        shutil.copyfile(db_file, Path(tmpdir) / db_file.name)
+        Database(databaseDir=tmpdir).pariwiseProteinInteractions(
+            dbID=db_file.name,
+            complexIDsColumn="subunits(UniProt IDs)",
+            filterDb={'Organism': ["Human"]}
+        )
+        assert Path(tmpdir, f"{db_file.stem}_Organism__Human.txt").is_file()

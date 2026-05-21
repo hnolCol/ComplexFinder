@@ -64,33 +64,46 @@ If you analyzed your data using ComplexFinder, we highly recommend to upload the
 
 ## Installation
 
-Download the zip file containing the source code from github.
-Navigate to the folder in terminal/command line tool.
+Navigate to the folder in which you would like create a new virtual Python
+environment via the terminal/command line tool, then:
+
 On Mac / Linux:
 ```
 #create virt env
 python3 -m venv env
 #activate
 source env/bin/activate
-#install packages from req file
-pip install -r requirements.txt
+#install package from GitHub
+pip install git+https://github.com/hnolCol/ComplexFinder.git
 ```
-For windows user:
+For Windows user:
 ```
 #create virt env
 py -m venv env
-#actve
+#activate
 .\env\Scripts\activate
-#install packages from req file
-pip3 install -r requirements.txt
-````
+#install package from GitHub
+pip install git+https://github.com/hnolCol/ComplexFinder.git
+```
+
+Alternatively, you can also clone the repository and install the package
+locally. This will allow you to make changes to the code and test them
+immediately.
+
+```
+git clone https://github.com/hnolCol/ComplexFinder.git
+cd ComplexFinder
+python3 -m venv env
+source env/bin/activate
+pip install -e .
+```
 
 ## Usage Example
 
 Upon downlaod and extraction of the package. You can find example data in the example-data folder.
 To run the anaylsis, you can enter:
 ```python
-from .src.main import ComplexFinder
+from complexfinder import ComplexFinder
 X = pd.read_table("./example-data/SILAC_01.txt", sep = "\t") #loading tab delimited txt file.
 ComplexFinder(analysisName = "ExampleRun_01").run(X)
 ```
@@ -98,7 +111,7 @@ You can also pass a folder path to run. This will yield in the anaylsis of each 
 
 ```python
 import os
-from .src.main import ComplexFinder
+from complexfinder import ComplexFinder
 folderPath = os.path(".","<my folder>")
 ComplexFinder().run(folderPath)
 ```
